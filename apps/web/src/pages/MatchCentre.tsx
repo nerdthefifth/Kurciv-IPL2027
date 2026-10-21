@@ -27,7 +27,7 @@ function PreMatch() {
   const career = useCareer();
   const o = career.overview.data;
   const nav = useNavigate();
-  const fx = o?.nextFixture;
+  const fx = o?.nextChapter?.fixture;
   const pre = useApi<any>(fx ? `/careers/${career.id}/prematch/${fx.id}` : null, [career.tick, fx?.id]);
   const [quick, setQuick] = useState(false);
   const [busy, setBusy] = useState(false);

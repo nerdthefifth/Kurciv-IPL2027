@@ -532,7 +532,7 @@ export class Backend {
 
     const command = z.discriminatedUnion('type', [
       z.object({ type: z.literal('begin') }),
-      z.object({ type: z.literal('bid'), amount: z.number().positive().max(500).optional() }),
+      z.object({ type: z.literal('bid'), amount: z.number().positive().max(500).optional(), upTo: z.number().positive().max(500).optional() }),
       z.object({ type: z.literal('pass') }),
       z.object({ type: z.literal('watch') }),
       z.object({ type: z.literal('proxy'), playerId: id, max: z.number().positive().max(500).nullable() }),
@@ -543,15 +543,30 @@ export class Backend {
       z.object({ type: z.literal('accelerated-start') }),
     ]);
 
+    // In-room commands are validated before anything changes. Bids, passes and pauses are saved
+    // like clock ticks (soon, not synchronously) so the room stays responsive; anything that
+    // completes a transaction or edits the shortlist is committed before success is reported.
+    const COMMIT_NOW = new Set<LiveCommand['type']>(['begin', 'proxy', 'flag', 'skip-lot', 'accelerated-toggle', 'accelerated-start']);
     r('POST', '/careers/:cid/auction/command', async ({ params, body }) => {
       const cmd = parse(command, body?.command) as LiveCommand;
-      return this.mutate(params.cid, (w) => {
+      return this.withLock(params.cid, async () => {
+        const entry = await this.load(params.cid);
+        const w = entry.world;
         const a = userAuctionOf(w);
         if (!a || a.status !== 'live') throw new AppError(409, 'There is no live auction for your league.');
+        const resultsBefore = a.live?.results.length ?? 0;
         const res = liveCommand(w, a, cmd);
         if (!res.ok) throw new AppError(400, res.error!);
         if ((a.status as string) === 'complete' && advanceCascade(w)) w.phase = 'preseason';
-        return { result: auctionRoomView(w, false) };
+        const resolved = (a.live?.results.length ?? 0) !== resultsBefore || (a.status as string) !== 'live';
+        if (resolved || COMMIT_NOW.has(cmd.type)) {
+          const t = this.dirty.get(params.cid);
+          if (t) clearTimeout(t);
+          this.dirty.delete(params.cid);
+          await this.commit(params.cid, entry, []);
+          if ((a.status as string) === 'complete') await this.backup(params.cid, w, 'Auction complete');
+        } else this.scheduleFlush(params.cid);
+        return { ...auctionRoomView(w, false), version: entry.meta.version };
       });
     });
 

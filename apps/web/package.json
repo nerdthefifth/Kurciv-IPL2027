@@ -9,9 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@kurciv/app-core": "*",
     "@kurciv/config": "*",
     "@kurciv/domain": "*",
     "@kurciv/simulation": "*",
+    "dexie": "4.0.10",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-router-dom": "6.28.0"

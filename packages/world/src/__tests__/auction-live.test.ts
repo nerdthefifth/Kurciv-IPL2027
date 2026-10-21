@@ -120,7 +120,9 @@ describe('live auction room', () => {
     const r = liveCommand(w, a, { type: 'bid' });
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/exceeds remaining purse|must be kept/);
-    expect(liveCommand(w, a, { type: 'bid', amount: 0.31 }).error).toMatch(/Bids must be one of/);
+    expect(liveCommand(w, a, { type: 'bid', amount: 0.31 }).error).toMatch(/Bids now:/);
+    const next = permittedBids(w, a)[0];
+    expect(liveCommand(w, a, { type: 'bid', upTo: next - 0.01 }).error).toMatch(/price moved/);
   });
 
   it('recovers exactly after a "refresh" (state round-trips through serialisation)', () => {

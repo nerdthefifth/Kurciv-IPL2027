@@ -301,7 +301,7 @@ export function liveTick(w: WorldState, a: AuctionState, dt: number): boolean {
 
 export type LiveCommand =
   | { type: 'begin' }
-  | { type: 'bid'; amount?: number }
+  | { type: 'bid'; amount?: number; upTo?: number }
   | { type: 'pass' }
   | { type: 'watch' }
   | { type: 'proxy'; playerId: string; max: number | null }
@@ -351,7 +351,11 @@ export function liveCommand(w: WorldState, a: AuctionState, cmd: LiveCommand): L
       if (leader(lot) === w.userClubId) return { ok: false, error: 'You already hold the highest bid.' };
       const allowed = permittedBids(w, a);
       const amount = cmd.amount === undefined ? allowed[0] : round2(cmd.amount);
-      if (!allowed.some((x) => Math.abs(x - amount) < 0.001)) return { ok: false, error: `Bids must be one of ${allowed.map(formatCr).join(', ')}.` };
+      // A paddle raise (no amount) bids the next increment, but never more than the caller allowed.
+      if (cmd.amount === undefined && cmd.upTo !== undefined && amount > cmd.upTo + 0.001) {
+        return { ok: false, error: `The price moved to ${formatCr(amount)}. Bid again if you still want the player.` };
+      }
+      if (!allowed.some((x) => Math.abs(x - amount) < 0.001)) return { ok: false, error: `The price moved on. Bids now: ${allowed.map(formatCr).join(', ')}.` };
       const err = validBidFor(w, a, w.clubs[w.userClubId], w.players[lot.playerId], amount);
       if (err) return { ok: false, error: err };
       placeBid(w, a, lot, live, w.userClubId, amount);

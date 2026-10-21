@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, useApi, type Loadable } from './api';
+import { api, onSaveStatus, onStorageMode, storageState, useApi, type Loadable, type SaveStatus } from './api';
+import { usePrefs } from './prefs';
 
 // ------------------------------------------------------------------ toasts
 
@@ -7,30 +8,32 @@ export interface Toast {
   id: number;
   kind: 'ok' | 'error' | 'info';
   text: string;
+  action?: { label: string; run: () => void };
 }
 
-const ToastCtx = createContext<{ push: (kind: Toast['kind'], text: string) => void }>({ push: () => {} });
+const ToastCtx = createContext<{ push: (kind: Toast['kind'], text: string, action?: Toast['action']) => void }>({ push: () => {} });
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const push = useCallback((kind: Toast['kind'], text: string) => {
+  const push = useCallback((kind: Toast['kind'], text: string, action?: Toast['action']) => {
     const id = Date.now() + Math.random();
-    setToasts((t) => [...t.slice(-3), { id, kind, text }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === 'error' ? 7000 : 4000);
+    setToasts((t) => [...t.slice(-3), { id, kind, text, action }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === 'error' ? 8000 : 4500);
   }, []);
   return (
     <ToastCtx.Provider value={{ push }}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[min(92vw,380px)] flex-col gap-2" role="status" aria-live="polite">
+      <div className="pointer-events-none fixed bottom-20 right-4 z-[100] flex w-[min(92vw,400px)] flex-col gap-2 lg:bottom-5" role="status" aria-live="polite">
         {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={`pointer-events-auto pop rounded-lg border px-4 py-3 text-sm shadow-xl ${
-              t.kind === 'error' ? 'border-danger/50 bg-[#2a1012] text-[#ffd0d0]' : t.kind === 'ok' ? 'border-lime/40 bg-[#18210a] text-lime-400' : 'border-obsidian-600 bg-obsidian-800 text-ink'
-            }`}
-          >
-            <span className="sr-only">{t.kind === 'error' ? 'Error: ' : t.kind === 'ok' ? 'Success: ' : ''}</span>
-            {t.text}
+          <div key={t.id} className={`pointer-events-auto rise flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-lift ${
+            t.kind === 'error' ? 'border-danger/40 bg-obsidian-900 text-ink' : t.kind === 'ok' ? 'border-lime/30 bg-obsidian-900 text-ink' : 'border-obsidian-600 bg-obsidian-900 text-ink'
+          }`}>
+            <span aria-hidden className={`mt-1 h-2 w-2 shrink-0 rounded-full ${t.kind === 'error' ? 'bg-danger' : t.kind === 'ok' ? 'bg-lime' : 'bg-info'}`} />
+            <span className="flex-1">
+              <span className="sr-only">{t.kind === 'error' ? 'Error: ' : ''}</span>
+              {t.text}
+            </span>
+            {t.action && <button className="font-semibold text-lime hover:underline" onClick={t.action.run}>{t.action.label}</button>}
           </div>
         ))}
       </div>
@@ -40,70 +43,48 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 export const useToast = () => useContext(ToastCtx);
 
-// ------------------------------------------------------------------ session
+// ------------------------------------------------------------------ save status
 
-interface User {
-  id: string;
-  username: string;
+/** Reflects real IndexedDB transactions: "Saved locally" is only shown after a commit succeeds. */
+export function useSaveStatus(careerId?: string): SaveStatus | null {
+  const [s, setS] = useState<SaveStatus | null>(null);
+  useEffect(() => onSaveStatus((x) => (!careerId || x.careerId === careerId) && setS(x)), [careerId]);
+  return s;
 }
 
-const AuthCtx = createContext<{ user: User | null; ready: boolean; setUser: (u: User | null) => void }>({ user: null, ready: false, setUser: () => {} });
-
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    api<{ user: User | null }>('/auth/me').then((r) => setUser(r.user)).catch(() => setUser(null)).finally(() => setReady(true));
-  }, []);
-  return <AuthCtx.Provider value={{ user, ready, setUser }}>{children}</AuthCtx.Provider>;
+export function useStorageMode() {
+  const [s, setS] = useState(storageState);
+  useEffect(() => onStorageMode(setS), []);
+  return s;
 }
-
-export const useAuth = () => useContext(AuthCtx);
 
 // ------------------------------------------------------------------ career
 
-export interface Overview {
-  version: number;
-  season: number;
-  day: number;
-  phase: string;
-  managerName: string;
-  club: any;
-  nextFixture: any;
-  recent: any[];
-  position: any;
-  table: any[];
-  fitness: any[];
-  news: any[];
-  urgent: string[];
-  finance: { purse: number; cash: number; payroll: number };
-  settings: { autoPlayUserMatches: boolean; reducedMotion: boolean };
-  difficulty: string;
-}
+export type Clubhouse = any;
 
 interface CareerCtxValue {
   id: string;
-  overview: Loadable<Overview>;
-  /** Bumps after every mutation so pages re-fetch. */
+  overview: Loadable<Clubhouse>;
   tick: number;
   refresh: () => void;
-  mutate: <T = any>(path: string, body?: unknown, opts?: { method?: string; success?: string }) => Promise<T | null>;
-  reducedMotion: boolean;
+  mutate: <T = any>(path: string, body?: unknown, opts?: { method?: string; success?: string; quiet?: boolean }) => Promise<T | null>;
 }
 
 const CareerCtx = createContext<CareerCtxValue | null>(null);
 
 export function CareerProvider({ id, children }: { id: string; children: ReactNode }) {
   const [tick, setTick] = useState(0);
-  const overview = useApi<Overview>(`/careers/${id}`, [tick]);
+  const overview = useApi<Clubhouse>(`/careers/${id}`, [tick]);
   const toast = useToast();
+  const { set } = usePrefs();
+  useEffect(() => set({ lastCareerId: id }), [id, set]);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
   const mutate = useCallback(
-    async <T,>(path: string, body?: unknown, opts: { method?: string; success?: string } = {}): Promise<T | null> => {
+    async <T,>(path: string, body?: unknown, opts: { method?: string; success?: string; quiet?: boolean } = {}): Promise<T | null> => {
       try {
         const r = await api<T>(`/careers/${id}${path}`, { method: opts.method ?? 'POST', body: body ?? {} });
         if (opts.success) toast.push('ok', opts.success);
-        setTick((t) => t + 1);
+        if (!opts.quiet) setTick((t) => t + 1);
         return r;
       } catch (e) {
         toast.push('error', (e as Error).message);
@@ -113,11 +94,7 @@ export function CareerProvider({ id, children }: { id: string; children: ReactNo
     },
     [id, toast],
   );
-  const reducedMotion = !!overview.data?.settings?.reducedMotion;
-  useEffect(() => {
-    document.documentElement.classList.toggle('reduced-motion', reducedMotion);
-  }, [reducedMotion]);
-  const value = useMemo(() => ({ id, overview, tick, refresh, mutate, reducedMotion }), [id, overview, tick, refresh, mutate, reducedMotion]);
+  const value = useMemo(() => ({ id, overview, tick, refresh, mutate }), [id, overview, tick, refresh, mutate]);
   return <CareerCtx.Provider value={value}>{children}</CareerCtx.Provider>;
 }
 
@@ -126,3 +103,5 @@ export function useCareer(): CareerCtxValue {
   if (!v) throw new Error('useCareer outside career');
   return v;
 }
+
+export { api };

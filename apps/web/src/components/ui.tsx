@@ -15,15 +15,61 @@ export function Card({ title, actions, children, className = '', pad = true }: {
   );
 }
 
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({ title, subtitle, actions, kicker }: { title: string; subtitle?: ReactNode; actions?: ReactNode; kicker?: string }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="font-display text-3xl font-bold uppercase tracking-wide md:text-4xl">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-ink-muted">{subtitle}</p>}
+    <div className="rise mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0">
+        {kicker && <div className="kicker mb-1.5">{kicker}</div>}
+        <h1 className="headline text-3xl md:text-[2.4rem] md:leading-[1.1]">{title}</h1>
+        {subtitle && <p className="mt-1.5 max-w-3xl text-sm text-ink-muted">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
+  );
+}
+
+/** Segmented control for small option sets (keyboard: arrow keys move between options). */
+export function Segmented<T extends string | number>({ options, value, onChange, label }: { options: { id: T; label: string }[]; value: T; onChange: (v: T) => void; label: string }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="inline-flex rounded-xl border border-obsidian-700 bg-obsidian-850 p-1">
+      {options.map((o, i) => (
+        <button
+          key={String(o.id)}
+          role="radio"
+          aria-checked={value === o.id}
+          tabIndex={value === o.id ? 0 : -1}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+              e.preventDefault();
+              const n = options[(i + (e.key === 'ArrowRight' ? 1 : options.length - 1)) % options.length];
+              onChange(n.id);
+            }
+          }}
+          onClick={() => onChange(o.id)}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${value === o.id ? 'bg-obsidian-700 text-ink' : 'text-ink-muted hover:text-ink'}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`animate-pulse rounded-lg bg-obsidian-800 ${className}`} aria-hidden />;
+}
+
+export function Steps({ steps, current }: { steps: string[]; current: number }) {
+  return (
+    <ol className="flex flex-wrap items-center gap-2 text-sm" aria-label="Progress">
+      {steps.map((s, i) => (
+        <li key={s} className="flex items-center gap-2" aria-current={i === current ? 'step' : undefined}>
+          <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${i < current ? 'bg-lime text-onaccent' : i === current ? 'border-2 border-lime text-lime' : 'border border-obsidian-600 text-ink-faint'}`}>{i < current ? '✓' : i + 1}</span>
+          <span className={i === current ? 'font-semibold text-ink' : 'text-ink-muted'}>{s}</span>
+          {i < steps.length - 1 && <span aria-hidden className="mx-1 h-px w-6 bg-obsidian-600" />}
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -84,7 +130,7 @@ export function Badge({ children, tone = 'default', title }: { children: ReactNo
 }
 
 /** A meter that always states its value in text — colour is never the only signal. */
-export function Meter({ value, max = 100, label, tone, invert = false, compact = false }: { value: number; max?: number; label?: string; tone?: 'lime' | 'warn' | 'danger'; invert?: boolean; compact?: boolean }) {
+export function Meter({ value, max = 100, label, tone, invert = false, compact = false, display }: { value: number; max?: number; label?: string; tone?: 'lime' | 'warn' | 'danger'; invert?: boolean; compact?: boolean; display?: ReactNode }) {
   const ratio = Math.max(0, Math.min(1, value / max));
   const bad = invert ? ratio : 1 - ratio;
   const t = tone ?? (bad > 0.66 ? 'danger' : bad > 0.4 ? 'warn' : 'lime');
@@ -94,7 +140,7 @@ export function Meter({ value, max = 100, label, tone, invert = false, compact =
       {label && (
         <div className="mb-1 flex justify-between text-xs">
           <span className="text-ink-muted">{label}</span>
-          <span className="num text-ink">{Math.round(value)}</span>
+          <span className="num text-ink">{display === undefined ? Math.round(value) : display}</span>
         </div>
       )}
       <div className="flex items-center gap-2">

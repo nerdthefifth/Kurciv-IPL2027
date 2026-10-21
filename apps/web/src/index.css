@@ -2,9 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ------------------------------------------------------------------ design tokens */
+:root,
+[data-theme='dark'] {
   color-scheme: dark;
-  --lime: #c6ff1a;
+  --bg: 16 18 16; /* obsidian #101210 */
+  --surface: 25 29 25; /* elevated graphite #191D19 */
+  --surface-2: 30 34 30;
+  --surface-3: 35 39 34; /* warm charcoal #232722 */
+  --line: 46 51 45;
+  --line-strong: 62 68 60;
+  --line-stronger: 84 91 81;
+  --text: 241 240 232; /* soft ivory #F1F0E8 */
+  --text-muted: 166 176 159; /* muted sage #A6B09F */
+  --text-faint: 116 124 111;
+  --accent: 197 243 107; /* kurciv lime #C5F36B */
+  --accent-hover: 210 247 140;
+  --accent-press: 172 220 86;
+  --accent-deep: 38 58 40; /* deep forest #263A28 */
+  --forest: 38 58 40;
+  --on-accent: 16 18 16;
+  --danger: 217 121 114; /* #D97972 */
+  --warn: 217 174 105; /* #D9AE69 */
+  --info: 143 180 196;
+  --glow: 197 243 107;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: 242 238 227; /* parchment */
+  --surface: 250 248 241;
+  --surface-2: 246 243 234;
+  --surface-3: 236 232 220;
+  --line: 222 216 201;
+  --line-strong: 204 197 180;
+  --line-stronger: 176 169 152;
+  --text: 38 41 36;
+  --text-muted: 92 99 88;
+  --text-faint: 131 137 125;
+  --accent: 78 112 24; /* deeper green for contrast on parchment */
+  --accent-hover: 92 128 30;
+  --accent-press: 64 94 18;
+  --accent-deep: 214 228 190;
+  --forest: 38 58 40;
+  --on-accent: 250 248 241;
+  --danger: 176 72 64;
+  --warn: 150 104 36;
+  --info: 58 104 128;
+  --glow: 78 112 24;
 }
 
 html,
@@ -14,102 +59,129 @@ body,
 }
 
 body {
-  background-color: #07080a;
-  font-feature-settings: 'tnum' 1, 'cv11' 1;
+  background-color: rgb(var(--bg));
+  color: rgb(var(--text));
+  font-feature-settings: 'cv11' 1, 'ss01' 1;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Carbon-fibre weave, pure CSS so it costs nothing to load */
-.carbon {
-  background-color: #0c0d10;
+/* Warm, barely-there grain: atmosphere without hurting legibility */
+.grain {
+  background-color: rgb(var(--bg));
   background-image:
-    linear-gradient(27deg, #101216 5px, transparent 5px),
-    linear-gradient(207deg, #101216 5px, transparent 5px),
-    linear-gradient(27deg, #0e1013 5px, transparent 5px),
-    linear-gradient(207deg, #0e1013 5px, transparent 5px),
-    linear-gradient(90deg, #0b0c0f 10px, transparent 10px),
-    linear-gradient(#0d0f12 25%, #0b0c0f 25%, #0b0c0f 50%, transparent 50%, transparent 75%, #101216 75%, #101216);
-  background-size: 20px 20px, 20px 20px, 20px 20px, 20px 20px, 20px 20px, 20px 20px;
-  background-position: 0 5px, 10px 0, 0 10px, 10px 5px, 0 0, 0 0;
+    radial-gradient(1200px 600px at 85% -10%, rgb(var(--forest) / 0.35), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgb(var(--forest) / 0.22), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
 }
 
 :focus-visible {
-  outline: 2px solid var(--lime);
+  outline: 2px solid rgb(var(--accent));
   outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.tabular,
+.num {
+  font-variant-numeric: tabular-nums;
 }
 
 @layer components {
   .card {
-    @apply rounded-xl border border-obsidian-700 bg-obsidian-900/90 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset];
+    @apply rounded-2xl border border-obsidian-700 bg-obsidian-900 shadow-soft;
   }
   .card-pad {
     @apply p-4 md:p-5;
   }
+  .panel {
+    @apply rounded-xl border border-obsidian-700 bg-obsidian-850;
+  }
   .h-section {
-    @apply font-display text-lg font-semibold uppercase tracking-wider text-ink;
+    @apply font-sans text-[13px] font-semibold uppercase tracking-[0.14em] text-ink-muted;
+  }
+  .headline {
+    @apply font-serif font-semibold tracking-tight text-ink;
+  }
+  .kicker {
+    @apply text-[11px] font-semibold uppercase tracking-[0.22em] text-lime;
   }
   .label {
     @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40;
   }
   .btn-primary {
-    @apply btn bg-lime text-obsidian-950 hover:bg-lime-400;
+    @apply btn bg-lime text-onaccent hover:bg-lime-400 active:bg-lime-600;
   }
   .btn-ghost {
-    @apply btn border border-obsidian-600 bg-obsidian-800 text-ink hover:border-obsidian-500 hover:bg-obsidian-700;
+    @apply btn border border-obsidian-600 bg-obsidian-850 text-ink hover:border-obsidian-500 hover:bg-obsidian-800;
+  }
+  .btn-quiet {
+    @apply btn text-ink-muted hover:bg-obsidian-800 hover:text-ink;
   }
   .btn-danger {
     @apply btn border border-danger/40 bg-danger/10 text-danger hover:bg-danger/20;
   }
   .input {
-    @apply w-full rounded-lg border border-obsidian-600 bg-obsidian-850 px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-lime/60 focus:outline-none;
+    @apply w-full rounded-xl border border-obsidian-600 bg-obsidian-850 px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-lime/60 focus:outline-none;
   }
   .table {
     @apply w-full text-left text-sm;
   }
   .table th {
-    @apply whitespace-nowrap border-b border-obsidian-700 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted;
+    @apply whitespace-nowrap border-b border-obsidian-700 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-faint;
   }
   .table td {
-    @apply whitespace-nowrap border-b border-obsidian-800 px-2 py-2;
+    @apply whitespace-nowrap border-b border-obsidian-700/60 px-2.5 py-2;
   }
   .table tbody tr:hover {
-    @apply bg-obsidian-800/60;
+    @apply bg-obsidian-850;
   }
   .num {
-    @apply font-display tabular-nums;
+    @apply font-display;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-obsidian-600 bg-obsidian-850 px-2.5 py-1 text-xs text-ink-muted;
   }
 }
+
+/* ------------------------------------------------------------------ motion */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pop {
+  0% { transform: scale(0.94); opacity: 0; }
+  60% { transform: scale(1.02); opacity: 1; }
+  100% { transform: scale(1); }
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgb(var(--glow) / 0.45); }
+  100% { box-shadow: 0 0 0 16px rgb(var(--glow) / 0); }
+}
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+@keyframes drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.rise { animation: rise 0.45s cubic-bezier(.2,.7,.2,1) both; }
+.pop { animation: pop 0.35s ease-out both; }
+.pulse { animation: pulse-ring 0.9s ease-out; }
+.drift { animation: drift 7s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.001ms !important;
-    transition-duration: 0.001ms !important;
-  }
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
-
-.reduced-motion *,
-.reduced-motion *::before,
-.reduced-motion *::after {
+.reduced-motion *, .reduced-motion *::before, .reduced-motion *::after {
   animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
 }
 
-@keyframes flash-lime {
-  0% { box-shadow: 0 0 0 0 rgba(198, 255, 26, 0.6); }
-  100% { box-shadow: 0 0 0 18px rgba(198, 255, 26, 0); }
-}
-.flash {
-  animation: flash-lime 0.9s ease-out;
-}
-@keyframes pop {
-  0% { transform: scale(0.85); opacity: 0; }
-  60% { transform: scale(1.06); opacity: 1; }
-  100% { transform: scale(1); }
-}
-.pop {
-  animation: pop 0.35s ease-out;
-}
+/* Hide scrollbars on horizontal strips but keep them scrollable */
+.strip { scrollbar-width: thin; }
+.strip::-webkit-scrollbar { height: 6px; }
+.strip::-webkit-scrollbar-thumb { background: rgb(var(--line-strong)); border-radius: 6px; }

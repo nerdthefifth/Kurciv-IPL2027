@@ -2,12 +2,14 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import './index.css';
-import { AuthProvider, CareerProvider, ToastProvider, useAuth } from './lib/context';
+import { CareerProvider, ToastProvider } from './lib/context';
+import { PrefsProvider } from './lib/prefs';
+import { MetaProvider } from './lib/meta';
 import { PlayerModalProvider } from './components/player';
 import { Shell } from './components/Shell';
 import { Loading } from './components/ui';
-import { AuthPage } from './pages/Auth';
-import { CareersPage } from './pages/Careers';
+import { HomePage } from './pages/Home';
+import { SavesPage } from './pages/Saves';
 import { NewCareerPage } from './pages/NewCareer';
 import { OverviewPage } from './pages/Overview';
 import { SquadPage } from './pages/Squad';
@@ -64,28 +66,22 @@ function CareerRoutes() {
   );
 }
 
-function Gate() {
-  const { user, ready } = useAuth();
-  if (!ready) return <Loading label="Starting Kurciv…" />;
-  if (!user) return <AuthPage />;
-  return (
-    <Routes>
-      <Route path="/" element={<CareersPage />} />
-      <Route path="/new" element={<NewCareerPage />} />
-      <Route path="/c/:cid/*" element={<CareerRoutes />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
-}
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ToastProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <Gate />
-        </BrowserRouter>
-      </AuthProvider>
-    </ToastProvider>
+    <PrefsProvider>
+      <ToastProvider>
+        <MetaProvider fallback={<Loading label="Starting the local game engine…" />}>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/saves" element={<SavesPage />} />
+              <Route path="/new" element={<NewCareerPage />} />
+              <Route path="/c/:cid/*" element={<CareerRoutes />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </MetaProvider>
+      </ToastProvider>
+    </PrefsProvider>
   </StrictMode>,
 );
