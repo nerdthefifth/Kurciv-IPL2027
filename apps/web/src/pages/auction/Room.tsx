@@ -5,18 +5,18 @@ import { ClubCrestById, PlayerPortrait } from '../../components/media';
 import { ConditionBadges, PlayerName, usePlayerModal } from '../../components/player';
 import { Icon } from '../../components/icons';
 import { Badge, Confirm, Kbd, Meter, Segmented, Tabs } from '../../components/ui';
-import { BidHistory, ClubGallery, Commentary, Countdown, PHASE_TEXT, ProxyEditor, Queue, StrategyPanel } from './parts';
-import type { Room } from './useRoom';
+import { BidHistory, ClubGallery, Commentary, Countdown, PHASE_TEXT, ProxyEditor, Queue, SkipDialog, StrategyPanel } from './parts';
+import type { Room, SkipMode } from './useRoom';
 
-type Props = { room: Room; full: Room | null; busy: boolean; command: (c: any, o?: { quietError?: boolean }) => Promise<boolean>; sim: (u: 'flagged' | 'set' | 'end', assistant: boolean) => void };
+type Props = { room: Room; full: Room | null; busy: boolean; command: (c: any, o?: { quietError?: boolean }) => Promise<boolean>; skip: (mode: SkipMode) => void };
 
-export function LiveRoom({ room, full, busy, command, sim }: Props) {
+export function LiveRoom({ room, full, busy, command, skip }: Props) {
   const a = room.auction;
   const live = a.live;
   const lot = a.lot;
   const { prefs, set } = usePrefs();
   const [confirmBid, setConfirmBid] = useState<number | null>(null);
-  const [skip, setSkip] = useState(false);
+  const [skipLot, setSkipLot] = useState(false);
   const [finish, setFinish] = useState(false);
   const [proxy, setProxy] = useState(false);
   const [tab, setTab] = useState<'commentary' | 'bids' | 'results'>('commentary');
@@ -59,12 +59,18 @@ export function LiveRoom({ room, full, busy, command, sim }: Props) {
             Lot <b className="num text-ink">{a.lotNumber}</b> of {a.totalLots} · {a.remaining} to go{lot ? ` · ${lot.set}` : ''}{lot?.round === 2 ? ' · accelerated round' : ''}
           </div>
         </div>
-        <Segmented label="Auction speed" value={prefs.auctionSpeed} onChange={(v) => set({ auctionSpeed: v })} options={[{ id: 1, label: '1×' }, { id: 2, label: '2×' }, { id: 4, label: '4×' }]} />
+        <label className="flex items-center gap-1.5 text-xs text-ink-muted" title="How long each bidding window stays open">
+          Bid clock
+          <select className="input w-auto py-1 text-xs" value={live.clockSetting ?? 'standard'} onChange={(e) => command({ type: 'clock', setting: e.target.value })}>
+            <option value="brisk">Brisk</option><option value="standard">Standard</option><option value="relaxed">Relaxed</option>
+          </select>
+        </label>
+        <Segmented label="Animation speed" value={prefs.auctionSpeed} onChange={(v) => set({ auctionSpeed: v })} options={[{ id: 1, label: '1×' }, { id: 2, label: '2×' }, { id: 4, label: '4×' }]} />
         <button className="btn-ghost" onClick={() => command({ type: 'pause', paused: !live.paused })} aria-pressed={live.paused}>
           <Icon name={live.paused ? 'play' : 'pause'} size={16} /> {live.paused ? 'Resume' : 'Pause'} <span className="hidden sm:inline"><Kbd>Space</Kbd></span>
         </button>
-        <button className="btn-quiet" disabled={busy || !lot} onClick={() => setSkip(true)} title="Let the other franchises settle this lot without you"><Icon name="fast" size={16} /> Skip lot</button>
-        <button className="btn-quiet" disabled={busy} onClick={() => setFinish(true)}>Assistant…</button>
+        <button className="btn-quiet" disabled={busy || !lot} onClick={() => setSkipLot(true)} title="Let the other franchises settle this lot without you"><Icon name="fast" size={16} /> Skip lot</button>
+        <button className="btn-ghost" disabled={busy} onClick={() => setFinish(true)}>Skip auction</button>
       </div>
 
       {live.outbid && lot && !lot.userOut && (
@@ -131,7 +137,8 @@ export function LiveRoom({ room, full, busy, command, sim }: Props) {
                         <ClubCrestById clubId={lot.leaderId} size={22} fallback={lot.leaderId === me?.id ? me : undefined} />
                         <span>{lot.leaderId === me?.id ? <b className="text-lime">You lead</b> : <>{lot.bids[lot.bids.length - 1].clubName} lead</>}</span>
                       </>
-                    ) : <span>No bids yet · {lot.activeBidders.length > 0 ? `${lot.activeBidders.length} franchise${lot.activeBidders.length > 1 ? 's' : ''} considering` : 'the room is quiet'}</span>}
+                    ) : <span>No bids yet</span>}
+                    <span className="text-ink-faint">· {lot.activeBidders.length} franchise{lot.activeBidders.length === 1 ? '' : 's'} interested</span>
                   </div>
                 </div>
                 <div className="text-right text-xs text-ink-muted">
@@ -154,6 +161,11 @@ export function LiveRoom({ room, full, busy, command, sim }: Props) {
                 <button className={`btn-quiet ${lot.proxy !== null ? 'text-lime' : ''}`} onClick={() => setProxy(true)}>{lot.proxy !== null ? `Proxy ${cr(lot.proxy)}` : 'Set proxy'}</button>
               </div>
               {lot.blockReason && <p className="mt-3 text-sm text-ink-muted">{lot.blockReason}</p>}
+              {lot.interest?.length > 0 && (
+                <ul className="mt-3 space-y-0.5 border-t border-obsidian-700 pt-2 text-xs text-ink-muted" aria-label="Why rivals are bidding">
+                  {lot.interest.map((i: any) => <li key={i.clubId}><b className="text-ink">{i.short}</b>: {i.reason}</li>)}
+                </ul>
+              )}
             </div>
           )}
 
@@ -192,19 +204,10 @@ export function LiveRoom({ room, full, busy, command, sim }: Props) {
         body={<>You are about to bid <b>{cr(confirmBid)}</b> for {lot?.player.name}. If you win, your purse drops to <b>{me ? cr(Math.round((me.purse - (confirmBid ?? 0)) * 100) / 100) : '—'}</b>. You can change this threshold in Settings.</>}
         onClose={() => setConfirmBid(null)}
         onConfirm={() => { const v = confirmBid; setConfirmBid(null); if (v) send(v === lot?.nextBid ? undefined : v); }} />
-      <Confirm open={skip} title="Skip this lot?" confirmLabel="Skip lot" body="You sit this one out and the other franchises settle it immediately. The result is recorded like any other sale."
-        onClose={() => setSkip(false)} onConfirm={() => { setSkip(false); command({ type: 'skip-lot' }); }} />
-      <Confirm open={finish} title="Hand over to your assistant?" confirmLabel="Run to my next flagged player"
-        body={
-          <div className="space-y-2">
-            <p>Your assistant bids on your behalf using the strategy panel’s limits and your proxies, and stops when one of your shortlisted players comes up.</p>
-            <div className="flex flex-wrap gap-2">
-              <button className="btn-ghost" onClick={() => { setFinish(false); sim('set', true); }}>Finish this set</button>
-              <button className="btn-ghost" onClick={() => { setFinish(false); sim('end', true); }}>Finish the whole auction</button>
-            </div>
-          </div>
-        }
-        onClose={() => setFinish(false)} onConfirm={() => { setFinish(false); sim('flagged', true); }} />
+      <Confirm open={skipLot} title="Skip this lot?" confirmLabel="Skip lot" body="You sit this one out and the other franchises settle it immediately. The result is recorded like any other sale."
+        onClose={() => setSkipLot(false)} onConfirm={() => { setSkipLot(false); command({ type: "skip-lot" }); }} />
+      <SkipDialog open={finish} onClose={() => setFinish(false)} shortlisted={(full?.auction?.queue ?? []).filter((x: any) => x.flagged).length}
+        onSkip={(mode) => { setFinish(false); skip(mode); }} />
       {proxy && lot && (
         <ProxyEditor player={lot.player} current={lot.proxy} onClose={() => setProxy(false)}
           onSave={async (v) => { if (await command({ type: 'proxy', playerId: lot.player.id, max: v })) setProxy(false); }} />

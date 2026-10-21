@@ -2,8 +2,9 @@ import type { AuctionState, Player, WorldState } from '@kurciv/domain';
 import { ageOf, canAfford, canRegister, isOverseas, marketValue, overall, reserveNeeded } from '@kurciv/domain';
 import { COUNTRY_NAMES, leagueById } from '@kurciv/config';
 import { pickXI } from '@kurciv/ai';
-import { AUCTION_TIMING, auctionEstimate, categoryOf, clubsInLeague, leader, nextBid, permittedBids, priceScale, roleDemand, roleTargets, squadOf, valuePlayer } from '@kurciv/world';
+import { AUCTION_TIMING, auditLeague, auctionEstimate, categoryOf, clubsInLeague, leader, nextBid, permittedBids, priceScale, roleDemand, roleTargets, squadOf, valuePlayer } from '@kurciv/world';
 import { playerView } from './views';
+const formatCr = (v: number) => `₹${v.toFixed(2)} Cr`;
 
 const CAT_LABEL: Record<string, string> = { WK: 'Wicketkeepers', BAT: 'Batters', AR: 'All-rounders', PACE: 'Fast bowlers', SPIN: 'Spinners' };
 
@@ -83,6 +84,18 @@ export function auctionRoomView(w: WorldState, full = true) {
       canBid: reg.ok && aff.ok && lead !== user.id && !lot.userOut && (live.phase === 'OPEN_FOR_BIDS' || live.phase === 'FINAL_CALL'),
       blockReason: lead === user.id ? 'You hold the highest bid.' : lot.userOut ? 'You passed on this player.' : !reg.ok ? reg.reason : !aff.ok ? aff.reason : null,
       activeBidders: live.bidders.filter((id) => !live.dropped.includes(id)),
+      // Why rivals are in: observable facts only (squad needs, purse, overseas slots) — never their valuations.
+      interest: live.bidders.filter((id) => !live.dropped.includes(id) && id !== w.userClubId).map((id) => {
+        const c = w.clubs[id];
+        const sq = squadOf(w, c);
+        const have = sq.filter((x) => categoryOf(x) === cat).length;
+        const target = roleTargets(l)[cat];
+        const osLeft = l.squadRules.maxOverseas - sq.filter((x) => isOverseas(x, l.domesticCountries)).length;
+        const role = CAT_LABEL[cat].toLowerCase();
+        const bits = [have < target ? `short of ${role} (${have}/${target})` : `already ${have} ${role}`, `${formatCr(c.purse)} left`];
+        if (isOverseas(p, l.domesticCountries)) bits.push(`${osLeft} overseas slot${osLeft === 1 ? '' : 's'} open`);
+        return { clubId: id, short: c.shortName, reason: bits.join(' · ') };
+      }),
       dropped: live.dropped,
       proxy: a.userProxy[lot.playerId] ?? null,
       strategy: {
@@ -127,7 +140,7 @@ export function auctionRoomView(w: WorldState, full = true) {
     cascade,
     auction: {
       id: a.id, leagueId: a.leagueId, leagueName: l.name, status: a.status, version: a.version,
-      live: live ? { phase: live.phase, phaseMs: Math.max(0, Math.round(live.phaseMs)), paused: live.paused, outbid: live.outbid, watching: live.userWatching, clock: live.clock } : null,
+      live: live ? { phase: live.phase, phaseMs: Math.max(0, Math.round(live.phaseMs)), paused: live.paused, outbid: live.outbid, watching: live.userWatching, clock: live.clock, clockSetting: live.clockScale === 0.7 ? 'brisk' : live.clockScale === 1.5 ? 'relaxed' : 'standard' } : null,
       lotNumber: a.currentLotIndex + 1, totalLots: a.lots.length, remaining: pool,
       lot: lotView,
       lastResult,
@@ -179,6 +192,7 @@ export function auctionSummary(w: WorldState) {
     bestValue: [...allSigned].filter((x) => overall(w.players[x.playerId]) >= 65).sort((x, y) => y.estimate - y.price - (x.estimate - x.price)).slice(0, 8),
     biggestContests: [...allSigned].sort((x, y) => y.bids - x.bids).slice(0, 6),
     unsold: a.lots.filter((x) => x.status === 'unsold' && !w.players[x.playerId].clubId).map((x) => ({ playerId: x.playerId, name: w.players[x.playerId].name, role: w.players[x.playerId].role, basePrice: x.basePrice })),
+    audit: auditLeague(w, a.leagueId),
   };
 }
 

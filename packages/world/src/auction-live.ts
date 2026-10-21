@@ -3,7 +3,7 @@ import { marketValue, overall } from '@kurciv/domain';
 import { leagueById } from '@kurciv/config';
 import { hash01 } from '@kurciv/simulation';
 import {
-  auctionEstimate, advanceCascade, categoryOf, closeLot, createLiveState, endRound, escalate, increment, leader, nextBid, openLot, priceScale, roleTargets, validBidFor,
+  valuePlayer, finishAuction, auctionEstimate, advanceCascade, categoryOf, closeLot, createLiveState, endRound, escalate, increment, leader, nextBid, openLot, priceScale, roleTargets, validBidFor,
 } from './auction';
 import { clubsInLeague, formatCr, round2, squadOf } from './util';
 
@@ -22,16 +22,20 @@ import { clubsInLeague, formatCr, round2, squadOf } from './util';
  */
 
 export const AUCTION_TIMING = {
-  introMs: 1900,
-  bidWindowMs: 5500,
-  emptyWindowMs: 2600, // no club interested at the base price: short last call
-  finalCallMs: 2500,
-  soldMs: 3200,
-  unsoldMs: 1500,
-  minReactMs: 650,
-  maxReactMs: 2600,
-  userProxyReactMs: 450,
+  introMs: 3200,
+  bidWindowMs: 7000,
+  emptyWindowMs: 3200, // no club interested at the base price: short last call
+  finalCallMs: 3200,
+  soldMs: 3800,
+  unsoldMs: 2000,
+  minReactMs: 1200,
+  maxReactMs: 3800,
+  userProxyReactMs: 700,
 };
+
+/** Bid-clock settings: how long each bidding window lasts (AI thinking time is unchanged). */
+export const BID_CLOCK = { brisk: 0.7, standard: 1, relaxed: 1.5 } as const;
+const win = (live: Live, ms: number) => Math.round(ms * (live.clockScale ?? 1));
 
 type Live = LiveAuction;
 
@@ -65,8 +69,9 @@ function reactionDelay(w: WorldState, a: AuctionState, lot: AuctionLot, clubId: 
   // Cheap relative to the ceiling → rapid-fire paddles; near the ceiling → long, visible hesitation.
   const ratio = price / max;
   const hesitation = 1 + 2.4 * Math.pow(ratio, 4);
-  const lo = 260 + (AUCTION_TIMING.minReactMs - 260) * ratio * ratio;
-  const hi = 900 + (AUCTION_TIMING.maxReactMs - 900) * ratio * ratio;
+  // Even cheap paddles take a moment: bids land after deliberate pauses, never in a burst.
+  const lo = 650 + (AUCTION_TIMING.minReactMs - 650) * ratio * ratio;
+  const hi = 1500 + (AUCTION_TIMING.maxReactMs - 1500) * ratio * ratio;
   const base = lo + r * (hi - lo);
   return Math.round(base * temperament * hesitation);
 }
@@ -105,7 +110,7 @@ function placeBid(w: WorldState, a: AuctionState, lot: AuctionLot, live: Live, c
   if (clubId === w.userClubId) live.userWatching = false;
   // Bid extension: every valid bid re-opens a full bidding window.
   live.phase = 'OPEN_FOR_BIDS';
-  live.phaseMs = AUCTION_TIMING.bidWindowMs;
+  live.phaseMs = win(live, AUCTION_TIMING.bidWindowMs);
   scheduleBidders(w, a, lot, live);
 }
 
@@ -140,7 +145,7 @@ function introduceLot(w: WorldState, a: AuctionState, live: Live) {
   if (!lot) return;
   const p = w.players[lot.playerId];
   live.phase = 'PLAYER_INTRODUCTION';
-  live.phaseMs = AUCTION_TIMING.introMs;
+  live.phaseMs = win(live, AUCTION_TIMING.introMs);
   live.schedule = {};
   live.dropped = [];
   live.bidders = [];
@@ -154,10 +159,10 @@ function openBidding(w: WorldState, a: AuctionState, live: Live) {
   const lot = currentLot(a)!;
   if (lot.status === 'pending') openLot(w, a, a.currentLotIndex);
   live.phase = 'OPEN_FOR_BIDS';
-  live.phaseMs = AUCTION_TIMING.bidWindowMs;
+  live.phaseMs = win(live, AUCTION_TIMING.bidWindowMs);
   scheduleBidders(w, a, lot, live);
   if (!Object.keys(live.schedule).length) {
-    live.phaseMs = AUCTION_TIMING.emptyWindowMs;
+    live.phaseMs = win(live, AUCTION_TIMING.emptyWindowMs);
     say(live, 'Any interest at the base price?', 'call');
   }
 }
@@ -280,7 +285,7 @@ export function liveTick(w: WorldState, a: AuctionState, dt: number): boolean {
       case 'OPEN_FOR_BIDS': {
         const lead = leader(lot);
         live.phase = 'FINAL_CALL';
-        live.phaseMs = AUCTION_TIMING.finalCallMs;
+        live.phaseMs = win(live, AUCTION_TIMING.finalCallMs);
         say(live, lead ? `Going once… going twice… at ${formatCr(lot.bids[lot.bids.length - 1].amount)} to ${w.clubs[lead].shortName}.` : `Last call at ${formatCr(lot.basePrice)}…`, 'call');
         break;
       }
@@ -309,7 +314,8 @@ export type LiveCommand =
   | { type: 'pause'; paused: boolean }
   | { type: 'skip-lot' }
   | { type: 'accelerated-toggle'; playerId: string }
-  | { type: 'accelerated-start' };
+  | { type: 'accelerated-start' }
+  | { type: 'clock'; setting: keyof typeof BID_CLOCK };
 
 export interface LiveResult {
   ok: boolean;
@@ -405,6 +411,11 @@ export function liveCommand(w: WorldState, a: AuctionState, cmd: LiveCommand): L
       live.phaseMs = 1200;
       return { ok: true };
     }
+    case 'clock': {
+      if (!(cmd.setting in BID_CLOCK)) return { ok: false, error: 'Unknown bid clock setting.' };
+      live.clockScale = BID_CLOCK[cmd.setting];
+      return { ok: true };
+    }
     case 'accelerated-toggle': {
       const acc = live.accelerated;
       if (live.phase !== 'ACCELERATED_SELECTION' || !acc) return { ok: false, error: 'The accelerated round is not being drafted.' };
@@ -422,8 +433,9 @@ export function liveCommand(w: WorldState, a: AuctionState, cmd: LiveCommand): L
       });
       live.accelerated = null;
       if (!fresh.length) {
-        endRound(w, a); // no round 2 lots → finishes
-        if (a.status !== 'live') live.phase = 'COMPLETED';
+        // Nobody nominated: the auction ends here (endRound would re-queue every unsold player).
+        finishAuction(w, a);
+        say(live, 'No accelerated round. That concludes the auction.', 'info');
         return { ok: true };
       }
       a.lots.push(...fresh);
@@ -458,3 +470,50 @@ export function roleDemand(w: WorldState, a: AuctionState): Record<string, { clu
 }
 
 export { createLiveState };
+
+export type SkipMode = 'assistant' | 'without-me' | 'until-flagged';
+
+/**
+ * Skip Auction: runs the same live auction engine at high speed. In 'assistant' and
+ * 'until-flagged' modes the user's assistant bids through proxies set to its valuation; in
+ * 'without-me' the user sits out every remaining lot. 'until-flagged' stops when one of the
+ * user's shortlisted players is introduced. Budgets, squad rules, unsold handling and the
+ * transaction history all follow the normal live path.
+ */
+export function fastForward(w: WorldState, a: AuctionState, mode: SkipMode): { stoppedAt: string | null; lots: number } {
+  const live = a.live;
+  if (!live) return { stoppedAt: null, lots: 0 };
+  const userClub = w.clubs[w.userClubId];
+  const assistantSet = new Set<string>();
+  const startLot = a.currentLotIndex;
+  const startLotId = currentLot(a)?.id ?? null;
+  let guard = 0;
+  live.paused = false;
+  if (live.phase === 'PREPARATION') liveCommand(w, a, { type: 'begin' });
+  let stoppedAt: string | null = null;
+  while (a.status === 'live' && guard++ < 200000) {
+    if (live.phase === 'ACCELERATED_SELECTION') {
+      liveCommand(w, a, { type: 'accelerated-start' });
+      continue;
+    }
+    const lot = currentLot(a);
+    if (!lot) break;
+    if (live.phase === 'PLAYER_INTRODUCTION' && lot.status === 'pending') {
+      if (mode === 'until-flagged' && lot.flaggedByUser && lot.id !== startLotId) {
+        stoppedAt = lot.playerId;
+        break;
+      }
+      if (mode === 'without-me') lot.userOut = true;
+      else if (a.userProxy[lot.playerId] === undefined) {
+        const v = valuePlayer(w, a, userClub, w.players[lot.playerId], a.currentLotIndex);
+        if (v.maxBid >= lot.basePrice) {
+          a.userProxy[lot.playerId] = v.maxBid;
+          assistantSet.add(lot.playerId);
+        }
+      }
+    }
+    liveTick(w, a, 5000);
+  }
+  for (const pid of assistantSet) delete a.userProxy[pid];
+  return { stoppedAt, lots: a.currentLotIndex - startLot };
+}

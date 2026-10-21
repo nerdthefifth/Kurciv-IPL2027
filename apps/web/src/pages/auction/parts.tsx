@@ -200,3 +200,27 @@ export function Queue({ queue, command, compact = false }: { queue: any[]; comma
     </div>
   );
 }
+
+/** Skip Auction: never silent — explains the outcome and offers the three ways to continue. */
+export function SkipDialog({ open, onClose, onSkip, shortlisted }: { open: boolean; onClose: () => void; onSkip: (mode: 'assistant' | 'without-me' | 'until-flagged') => void; shortlisted: number }) {
+  return (
+    <Modal open={open} title="Skip the auction?" onClose={onClose}>
+      <div className="space-y-3 text-sm">
+        <p className="text-ink-muted">The remaining lots run through the same auction engine at high speed. Budgets, squad limits, unsold players and every transaction are kept exactly as in live bidding, and you get a full summary at the end.</p>
+        <button className="w-full rounded-xl border border-lime/50 bg-lime/5 p-3 text-left hover:border-lime" onClick={() => onSkip('assistant')}>
+          <span className="block font-semibold">Simulate the rest — my assistant bids for me</span>
+          <span className="block text-xs text-ink-muted">Bids up to the assistant’s valuation on each player (your proxies still apply).</span>
+        </button>
+        <button className="w-full rounded-xl border border-obsidian-700 p-3 text-left hover:border-obsidian-500 disabled:opacity-50" disabled={shortlisted === 0} onClick={() => onSkip('until-flagged')}>
+          <span className="block font-semibold">Simulate until my next shortlisted player</span>
+          <span className="block text-xs text-ink-muted">{shortlisted ? `The assistant bids until one of your ${shortlisted} shortlisted players comes up, then you take over.` : 'Flag players in the Upcoming list to use this.'}</span>
+        </button>
+        <button className="w-full rounded-xl border border-obsidian-700 p-3 text-left hover:border-obsidian-500" onClick={() => onSkip('without-me')}>
+          <span className="block font-semibold">Simulate the rest without me</span>
+          <span className="block text-xs text-ink-muted">You make no more signings at this auction (proxies are ignored). Free agents remain in pre-season.</span>
+        </button>
+        <div className="flex justify-end"><button className="btn-ghost" onClick={onClose}>Cancel and return to the room</button></div>
+      </div>
+    </Modal>
+  );
+}

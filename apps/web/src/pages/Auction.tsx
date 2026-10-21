@@ -13,7 +13,7 @@ export function AuctionPage() {
 }
 
 function AuctionHouse() {
-  const { room, full, error, busy, command, sim, reload } = useAuctionRoom();
+  const { room, full, error, busy, command, skip, reload } = useAuctionRoom();
   if (error && !room) return <ErrorState error={new Error(error)} retry={reload} />;
   if (!room) return <Loading label="Opening the auction room…" />;
   const a = room.auction;
@@ -28,12 +28,12 @@ function AuctionHouse() {
   const pending = room.cascade.filter((c: any) => !c.interactive && c.status !== 'complete');
   if (a.status === 'complete' || a.live?.phase === 'COMPLETED') return <AuctionSummary />;
   if (pending.length && !a.live) return <Loading label={`Waiting for ${pending.map((c: any) => c.leagueName).join(', ')}…`} />;
-  if (!a.live || a.live.phase === 'PREPARATION') return <Lobby room={room} full={full} busy={busy} command={command} sim={sim} />;
+  if (!a.live || a.live.phase === 'PREPARATION') return <Lobby room={room} full={full} busy={busy} command={command} skip={skip} />;
   if (a.live.phase === 'ACCELERATED_SELECTION') return <AcceleratedSelection room={room} busy={busy} command={command} />;
   return (
     <>
       {error && <p className="mb-3 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-sm" role="alert">{error} <button className="underline" onClick={reload}>Reconnect</button></p>}
-      <LiveRoom room={room} full={full} busy={busy} command={command} sim={sim} />
+      <LiveRoom room={room} full={full} busy={busy} command={command} skip={skip} />
     </>
   );
 }

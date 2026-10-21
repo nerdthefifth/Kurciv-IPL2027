@@ -30,7 +30,8 @@ export async function createCareer(page: Page, opts: { club?: string; manager?: 
 export async function finishAuctionWithAssistant(page: Page, cid: string) {
   await page.goto(`/c/${cid}/auction`);
   await expect(page.getByRole('heading', { name: 'The room is set.' })).toBeVisible();
-  await page.getByRole('button', { name: 'Let my assistant run it' }).click();
+  await page.getByRole('button', { name: 'Skip auction' }).click();
+  await page.getByRole('dialog', { name: 'Skip the auction?' }).getByRole('button', { name: /my assistant bids for me/ }).click();
   await expect(page.getByRole('heading', { name: 'The hammer falls for the last time.' })).toBeVisible({ timeout: 180_000 });
 }
 

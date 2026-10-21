@@ -578,6 +578,8 @@ export interface LiveAuction {
   accelerated: { candidates: Id[]; selected: Id[] } | null;
   userWatching: boolean;
   outbid: boolean;
+  /** Bid-clock multiplier for bidding windows (1 = standard). */
+  clockScale?: number;
 }
 
 // ---------------------------------------------------------------- ledgers, news, history

@@ -115,7 +115,7 @@ describe('live auction room', () => {
     const a = userAuction(w);
     liveCommand(w, a, { type: 'begin' });
     expect(liveCommand(w, a, { type: 'bid' }).error).toMatch(/opens in a moment/);
-    liveTick(w, a, 3000);
+    for (let i = 0; i < 40 && a.live!.phase !== 'OPEN_FOR_BIDS'; i++) liveTick(w, a, 250);
     w.clubs.CHE.purse = 0.2;
     const r = liveCommand(w, a, { type: 'bid' });
     expect(r.ok).toBe(false);

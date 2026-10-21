@@ -6,7 +6,7 @@ import { defaultTactics, pickXI, simulateMatch } from '@kurciv/ai';
 import { BUILT_IN_FIELDS, applyAction, createMatch, validateField, type MatchAction, type MatchState } from '@kurciv/simulation';
 import {
   advance, advanceCascade, applyStoryAction, auctionAct, autoFillUserSquad, buildMatchSetup, clubsInLeague, commitRetentions, completeUserFixture,
-  createWorld, endSeason, facilityUpgradeCost, freeAgentsFor, liveCommand, liveTick, matchSeed, nextUserFixture, planFormat, promoteYouth,
+  createWorld, endSeason, fastForward, facilityUpgradeCost, freeAgentsFor, liveCommand, liveTick, matchSeed, nextUserFixture, planFormat, promoteYouth,
   qualificationPath, releasePlayer, releaseYouth, selectXI, setUserRetentions, signFreeAgent, squadOf, squadProblems, startSeason, upgradeFacility,
   type LiveCommand, type MatchRecord,
 } from '@kurciv/world';
@@ -561,12 +561,13 @@ export class Backend {
       z.object({ type: z.literal('skip-lot') }),
       z.object({ type: z.literal('accelerated-toggle'), playerId: id }),
       z.object({ type: z.literal('accelerated-start') }),
+      z.object({ type: z.literal('clock'), setting: z.enum(['brisk', 'standard', 'relaxed']) }),
     ]);
 
     // In-room commands are validated before anything changes. Bids, passes and pauses are saved
     // like clock ticks (soon, not synchronously) so the room stays responsive; anything that
     // completes a transaction or edits the shortlist is committed before success is reported.
-    const COMMIT_NOW = new Set<LiveCommand['type']>(['begin', 'pause', 'proxy', 'flag', 'skip-lot', 'accelerated-toggle', 'accelerated-start']);
+    const COMMIT_NOW = new Set<LiveCommand['type']>(['begin', 'pause', 'clock', 'proxy', 'flag', 'skip-lot', 'accelerated-toggle', 'accelerated-start']);
     r('POST', '/careers/:cid/auction/command', async ({ params, body }) => {
       const cmd = parse(command, body?.command) as LiveCommand;
       return this.withLock(params.cid, async () => {
@@ -588,6 +589,18 @@ export class Backend {
         } else this.scheduleFlush(params.cid);
         return { ...auctionRoomView(w, false), version: entry.meta.version };
       });
+    });
+
+    // Skip Auction: the same live engine, run at high speed, committed atomically.
+    r('POST', '/careers/:cid/auction/skip', async ({ params, body }) => {
+      const { mode } = parse(z.object({ mode: z.enum(['assistant', 'without-me', 'until-flagged']) }), body);
+      return this.mutate(params.cid, (w) => {
+        const a = userAuctionOf(w);
+        if (!a || a.status !== 'live' || !a.live) throw new AppError(409, 'There is no live auction for your league.');
+        const res = fastForward(w, a, mode);
+        if ((a.status as string) === 'complete' && advanceCascade(w)) w.phase = 'preseason';
+        return { result: { status: a.status, phase: w.phase, stoppedAt: res.stoppedAt ? w.players[res.stoppedAt].name : null, lots: res.lots } };
+      }, { backup: 'Auction complete' });
     });
 
     r('POST', '/careers/:cid/auction/sim', async ({ params, body }) => {

@@ -9,7 +9,7 @@ import { Async, Badge, Meter, Tabs } from '../../components/ui';
 export function AuctionSummary() {
   const career = useCareer();
   const state = useApi<any>(`/careers/${career.id}/auction/summary`, [career.tick]);
-  const [tab, setTab] = useState<'mine' | 'clubs' | 'market'>('mine');
+  const [tab, setTab] = useState<'mine' | 'clubs' | 'market' | 'audit'>('mine');
   return (
     <Async state={state}>
       {(s) => {
@@ -30,7 +30,7 @@ export function AuctionSummary() {
               <div className="mt-5"><ContinueButton big /></div>
             </section>
 
-            <Tabs value={tab} onChange={setTab} tabs={[{ id: 'mine', label: 'Your auction' }, { id: 'clubs', label: 'Every franchise' }, { id: 'market', label: 'Market moments' }]} />
+            <Tabs value={tab} onChange={setTab} tabs={[{ id: 'mine', label: 'Your auction' }, { id: 'clubs', label: 'Every franchise' }, { id: 'market', label: 'Market moments' }, { id: 'audit', label: 'Financial audit' }]} />
 
             {tab === 'mine' && mine && (
               <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -78,6 +78,31 @@ export function AuctionSummary() {
                     <p className="mt-2 text-xs text-ink-muted">Best signing: {c.signings.length ? [...c.signings].sort((a: any, b: any) => b.price - a.price)[0].name : '—'} · strongest {c.strongest.toLowerCase()}</p>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {tab === 'audit' && s.audit && (
+              <div className="space-y-3">
+                <p className={`rounded-lg border px-3 py-2 text-sm ${s.audit.ok ? 'border-lime/40 bg-lime/5' : 'border-danger/40 bg-danger/10'}`}>
+                  {s.audit.ok ? 'Every purse reconciles with its transactions and every squad is within the league’s rules.' : `${s.audit.issues.length} issue${s.audit.issues.length === 1 ? '' : 's'} found.`}
+                </p>
+                {!s.audit.ok && <ul className="list-disc pl-5 text-sm text-danger">{s.audit.issues.map((i: string) => <li key={i}>{i}</li>)}</ul>}
+                <div className="card overflow-x-auto">
+                  <table className="table">
+                    <thead><tr><th>Franchise</th><th className="text-right">Purse</th><th className="text-right">Retentions</th><th className="text-right">Auction</th><th className="text-right">Other</th><th className="text-right">Left</th><th className="text-right">Squad</th><th className="text-right">Overseas</th><th>Check</th></tr></thead>
+                    <tbody>
+                      {s.audit.clubs.map((c: any) => (
+                        <tr key={c.clubId}>
+                          <td>{c.name}</td>
+                          <td className="num text-right">{cr(c.purseStart)}</td><td className="num text-right">{cr(c.retentions)}</td><td className="num text-right">{cr(c.auction)}</td>
+                          <td className="num text-right">{cr(c.otherSignings)}</td><td className="num text-right">{cr(c.purseNow)}</td>
+                          <td className="num text-right">{c.squad}</td><td className="num text-right">{c.overseas}</td>
+                          <td>{c.issues.length ? <Badge tone="danger">{c.issues.length} issue{c.issues.length === 1 ? '' : 's'}</Badge> : <Badge tone="lime">OK</Badge>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 

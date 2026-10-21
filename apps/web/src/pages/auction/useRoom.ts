@@ -5,6 +5,7 @@ import { usePrefs } from '../../lib/prefs';
 import { buzz, sfx } from '../../lib/sound';
 
 export type Room = any;
+export type SkipMode = 'assistant' | 'without-me' | 'until-flagged';
 
 const RUNNING = new Set(['PLAYER_INTRODUCTION', 'OPEN_FOR_BIDS', 'FINAL_CALL', 'SOLD', 'UNSOLD']);
 
@@ -140,10 +141,12 @@ export function useAuctionRoom() {
     }
   }, [base, react, loadFull, toast, refresh]);
 
-  const sim = useCallback(async (until: 'flagged' | 'set' | 'end', assistant: boolean) => {
+  /** Skip Auction: the same live engine at high speed (assistant bids, sit out, or stop at a shortlisted player). */
+  const skip = useCallback(async (mode: SkipMode) => {
     setBusy(true);
     try {
-      await api(`${base}/sim`, { body: { until, assistant } });
+      const r = await api<{ stoppedAt: string | null; lots: number }>(`${base}/skip`, { body: { mode } });
+      if (r.stoppedAt) toast.push('info', `Stopped for your shortlisted player: ${r.stoppedAt}.`);
       await loadFull();
       refresh();
     } catch (e) {
@@ -153,7 +156,7 @@ export function useAuctionRoom() {
     }
   }, [base, loadFull, refresh, toast]);
 
-  return { room, full, error, busy, command, sim, reload: loadFull };
+  return { room, full, error, busy, command, skip, reload: loadFull };
 }
 
 /** Tick and command responses are "lite": keep the last full queue and lobby. */

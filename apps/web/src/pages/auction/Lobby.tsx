@@ -3,10 +3,12 @@ import { usePrefs } from '../../lib/prefs';
 import { ClubCrestById } from '../../components/media';
 import { Icon } from '../../components/icons';
 import { Badge, Segmented } from '../../components/ui';
-import { Queue } from './parts';
-import type { Room } from './useRoom';
+import { Queue, SkipDialog } from './parts';
+import type { Room, SkipMode } from './useRoom';
+import { useState } from 'react';
 
-export function Lobby({ room, full, busy, command, sim }: { room: Room; full: Room | null; busy: boolean; command: (c: any) => Promise<boolean>; sim: (u: 'flagged' | 'set' | 'end', assistant: boolean) => void }) {
+export function Lobby({ room, full, busy, command, skip }: { room: Room; full: Room | null; busy: boolean; command: (c: any) => Promise<boolean>; skip: (mode: SkipMode) => void }) {
+  const [skipOpen, setSkipOpen] = useState(false);
   const a = room.auction;
   const lobby = full?.auction?.lobby ?? a.lobby;
   const { prefs, set } = usePrefs();
@@ -26,7 +28,7 @@ export function Lobby({ room, full, busy, command, sim }: { room: Room; full: Ro
           <div className="flex items-center gap-2 text-sm text-ink-muted">
             Pace <Segmented label="Auction speed" value={prefs.auctionSpeed} onChange={(v) => set({ auctionSpeed: v })} options={[{ id: 1, label: '1×' }, { id: 2, label: '2×' }, { id: 4, label: '4×' }]} />
           </div>
-          <button className="btn-quiet" disabled={busy} onClick={() => sim('end', true)} title="Your assistant bids for you using the strategy panel's limits">Let my assistant run it</button>
+          <button className="btn-ghost" disabled={busy} onClick={() => setSkipOpen(true)}>Skip auction</button>
         </div>
       </section>
 
@@ -108,6 +110,7 @@ export function Lobby({ room, full, busy, command, sim }: { room: Room; full: Ro
           )}
         </aside>
       </div>
+      <SkipDialog open={skipOpen} onClose={() => setSkipOpen(false)} shortlisted={(full?.auction?.queue ?? []).filter((x: any) => x.flagged).length} onSkip={(mode) => { setSkipOpen(false); skip(mode); }} />
     </div>
   );
 }

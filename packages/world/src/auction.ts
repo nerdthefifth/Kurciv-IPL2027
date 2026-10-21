@@ -21,15 +21,15 @@ export function priceScale(l: LeagueConfig): number {
 }
 
 /**
- * Expected hammer price. Calibrated against simulated auctions: fringe players (under ~1% of the
- * purse in value) usually go near their base price, while anyone worth a franchise's attention
- * draws competition and sells for roughly twice their raw value.
+ * Expected hammer price, calibrated against simulated auctions run through the live engine.
  */
 export function auctionEstimate(p: Player, season: number, l: LeagueConfig): number {
   const raw = marketValue(p, season) * priceScale(l);
   const rel = raw / l.auctionRules.purse;
-  const t = Math.max(0, Math.min(1, (rel - 0.011) / 0.009));
-  return Math.round(raw * (0.52 + 1.63 * t) * 100) / 100;
+  // Calibrated against simulated auctions: fringe players go near half their raw value, and the
+  // multiple rises steadily with quality to about 1.6x for the very best.
+  const mult = Math.min(1.7, 0.5 + Math.max(0, rel - 0.015) * 17);
+  return Math.round(raw * mult * 100) / 100;
 }
 
 export function increment(l: LeagueConfig, price: number): number {
@@ -65,11 +65,37 @@ export function roleTargets(l: LeagueConfig): Record<Category, number> {
   return { WK: 2, BAT: Math.round(S * 0.26), AR: Math.round(S * 0.2), PACE: Math.round(S * 0.22), SPIN: Math.round(S * 0.13) };
 }
 
-function xiStrength(players: Player[], l: LeagueConfig): number {
+function xiStrength(players: Player[], l: LeagueConfig, replacement = REPLACEMENT_LEVEL): number {
   // Empty slots count at replacement level: what a club can still expect to buy later.
-  if (players.length < 11) return players.reduce((a, p) => a + overall(p), 0) + (11 - players.length) * REPLACEMENT_LEVEL;
+  if (players.length < 11) return players.reduce((a, p) => a + overall(p), 0) + (11 - players.length) * replacement;
   return pickXI(players, l.squadRules, l.domesticCountries).reduce((a, p) => a + overall(p), 0);
 }
+
+/**
+ * Replacement level: the quality a club can still expect to pick up cheaply later in this
+ * auction — the rating of the marginal XI-calibre player left in the pool, given how many
+ * XI places are still open across the league. It falls as the good players are bought.
+ */
+export function replacementLevel(w: WorldState, a: AuctionState, lotIndex: number): number {
+  const l = leagueById(a.leagueId);
+  const vacancies = clubsInLeague(w, l.id).reduce((s, c) => s + Math.max(0, 11 - Math.min(11, c.squad.length)), 0);
+  const pool = a.lots.slice(lotIndex + 1).filter((x) => x.status === 'pending').map((x) => overall(w.players[x.playerId])).sort((x, y) => y - x);
+  if (!pool.length || vacancies === 0) return 58;
+  const idx = Math.min(pool.length - 1, Math.max(0, vacancies - 1));
+  return Math.max(55, Math.min(78, pool[idx]));
+}
+
+/** Money per rating point above replacement, from the league's own economics. */
+export function pricePerPoint(l: LeagueConfig): number {
+  // A club spends roughly three quarters of its purse on an XI about 12 points per place above replacement.
+  return (0.75 * l.auctionRules.purse) / (11 * 12);
+}
+
+/** Share of the starting purse a club will commit to one player (before exceptional-player headroom). */
+const BUDGET_SHARE: Record<string, number> = {
+  'aggressive-contender': 0.24, 'star-commercial': 0.22, 'youth-builder': 0.18, 'value-hunter': 0.17,
+  'spin-tactician': 0.19, 'pace-first': 0.19, conservative: 0.16, rebuilding: 0.17,
+};
 
 // ------------------------------------------------------------------ setup / lots
 
@@ -167,11 +193,16 @@ export function valuePlayer(w: WorldState, a: AuctionState, club: Club, p: Playe
   const tgt = roleTargets(l);
   const have = squad.filter((x) => categoryOf(x) === cat).length;
   const need = have < tgt[cat] ? 1 + (0.45 * (tgt[cat] - have)) / tgt[cat] + (have === 0 && cat === 'WK' ? 0.4 : 0) : Math.pow(0.6, have - tgt[cat] + 1);
-  const before = xiStrength(squad, l);
-  const after = xiStrength([...squad, p], l);
+  // Contribution: rating points this player adds to the club's likely XI over what it could
+  // still buy cheaply (replacement level), priced from the league's economics, with a modest
+  // premium for genuinely rare quality. Blended with the market's view of the player.
+  const repl = replacementLevel(w, a, lotIndex);
+  const before = xiStrength(squad, l, repl);
+  const after = xiStrength([...squad, p], l, repl);
   const deltaXI = Math.max(0, after - before);
   const market = marketValue(p, w.season);
-  let value = (0.5 * market * need + 0.85 * deltaXI) * scale;
+  const contribution = pricePerPoint(l) * deltaXI * (1 + deltaXI / 30);
+  let value = 0.55 * contribution * Math.min(1.25, need) + 0.45 * market * need * scale;
 
   // Replacement availability later in this auction
   const ovr = overall(p);
@@ -187,6 +218,11 @@ export function valuePlayer(w: WorldState, a: AuctionState, club: Club, p: Playe
   // A club that just lost a contested player in this role chases a substitute a little harder.
   const chasing = a.live?.missed[club.id]?.includes(cat) ? 1.12 : 1;
   value *= chasing;
+  // Budget pressure: money left unspent after the auction is worth nothing, so a club holding a
+  // large purse per open slot is willing to pay more (and a stretched club less).
+  const openSlots = Math.max(1, Math.min(l.squadRules.maxSquad, 22) - squad.length);
+  const pressure = Math.pow(Math.min(3, Math.max(0.6, club.purse / openSlots / (l.auctionRules.purse / 22))), 0.9);
+  value *= pressure;
   const pers = personalityMult(club, p, w.season);
   value *= pers;
   value *= 0.93 + hash01(`${w.seed}|${club.id}|${p.id}`) * 0.14; // scouting disagreement
@@ -199,7 +235,10 @@ export function valuePlayer(w: WorldState, a: AuctionState, club: Club, p: Playe
   const fairShare = spendable / slotsLeft;
   const style = club.personality === 'aggressive-contender' ? 1.25 : club.personality === 'star-commercial' ? 1.15 : club.personality === 'conservative' ? 0.85 : club.personality === 'value-hunter' ? 0.9 : 1;
   const allowance = (0.8 + Math.max(0, ovr - 60) * 0.16) * style * (0.9 + hash01(`${w.seed}|cap|${club.id}|${p.id}`) * 0.2);
-  let maxBid = Math.min(value, spendable, fairShare * allowance);
+  // No club sinks most of its purse into one or two players; exceptional players earn headroom.
+  const share = (BUDGET_SHARE[club.personality] ?? 0.18) + (ovr >= 86 ? 0.05 : ovr >= 83 ? 0.02 : 0);
+  const shareCap = l.auctionRules.purse * share * Math.min(1.5, pressure) * (0.92 + hash01(`${w.seed}|share|${club.id}|${p.id}`) * 0.16);
+  let maxBid = Math.min(value, spendable, fairShare * allowance, shareCap);
   maxBid = round2(maxBid);
   const bits: string[] = [];
   if (have < tgt[cat]) bits.push(`short of ${cat === 'PACE' ? 'fast bowlers' : cat === 'SPIN' ? 'spinners' : cat === 'WK' ? 'wicketkeepers' : cat === 'AR' ? 'all-rounders' : 'batters'} (${have}/${tgt[cat]})`);
@@ -209,7 +248,8 @@ export function valuePlayer(w: WorldState, a: AuctionState, club: Club, p: Playe
   if (scarcity < 1) bits.push('similar options still to come');
   if (pers !== 1) bits.push(PERSONALITY_NOTES[club.personality]);
   if (chasing > 1) bits.push('missed out on a target in this role earlier');
-  if (maxBid < value * 0.9) bits.push(`capped by purse plan (${formatCr(spendable)} spendable over ${slotsLeft} slots)`);
+  if (pressure > 1.15) bits.push('plenty of purse left per open slot');
+  if (maxBid < value * 0.9) bits.push(maxBid >= shareCap * 0.99 ? `capped at ${Math.round(share * 100)}% of the purse for one player` : `capped by purse plan (${formatCr(spendable)} spendable over ${slotsLeft} slots)`);
   return { value: round2(value), maxBid, reason: bits.join('; ') };
 }
 

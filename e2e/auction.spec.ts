@@ -49,6 +49,8 @@ test('assistant-completed auction respects roster rules and opens pre-season', a
   await finishAuctionWithAssistant(page, cid);
   await page.getByRole('tab', { name: 'Every franchise' }).click();
   await expect(page.getByText('Spent').first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Financial audit' }).click();
+  await expect(page.getByText(/Every purse reconciles/)).toBeVisible();
   await page.goto(`/c/${cid}/squad`);
   const header = await page.getByText(/\d+\/25 registered/).textContent();
   const [, n] = header!.match(/(\d+)\/25 registered/)!;
