@@ -765,4 +765,28 @@ export interface WorldState {
   storyKeys: Record<string, number>;
   /** Players each club has fielded this season (for debut detection). */
   appearances: Record<string, string[]>;
+  /** Finalised consequences of each of the user's matches, captured when the result was applied. */
+  matchImpacts: Record<string, MatchImpact>;
+}
+
+export interface StandingSnapshot {
+  position: number | null;
+  teams: number;
+  points: number;
+  played: number;
+  nrr: number;
+}
+
+export interface MatchImpact {
+  fixtureId: string;
+  season: number;
+  clubId: Id;
+  standings: { before: StandingSnapshot; after: StandingSnapshot } | null;
+  players: { id: Id; name: string; played: boolean; form: [number, number]; fatigue: [number, number]; morale: [number, number]; injury: string | null; injuryDays: number | null }[];
+  /** Career-timeline entries and news created while this result was applied. */
+  timeline: { title: string; detail: string }[];
+  news: { headline: string; body: string }[];
+  records: string[];
+  /** Estimated playoff / WCC chances after the match, when the engine computed them. */
+  odds: { playoffs: number; wcc: number } | null;
 }

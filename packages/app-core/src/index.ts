@@ -7,3 +7,6 @@ export * from './clubhouse';
 export * from './intel';
 export * from './match';
 export * from './idb-adapter';
+export * from './report/match-report';
+export * from './report/highlights';
+export * from './report/archive';

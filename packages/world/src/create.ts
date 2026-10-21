@@ -89,7 +89,7 @@ export function createWorld(input: CreateCareerInput): WorldState {
     records: { highestTeamTotal: null, lowestTeamTotal: null, highestScore: null, bestBowling: null, mostCareerRuns: null, mostCareerWickets: null },
     rivalries: {}, freeAgents: [], counter: 0, settings: { autoPlayUserMatches: false, reducedMotion: false },
     scouting: { userBattingVsPace: [], userBattingVsSpin: [] }, pendingDecisions: [],
-    stories: [], timeline: [], chronicles: [], storyKeys: {}, appearances: {},
+    stories: [], timeline: [], chronicles: [], storyKeys: {}, appearances: {}, matchImpacts: {},
   };
 
   for (const l of LEAGUES) {

@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { dayLabel } from '../lib/api';
 import { useApi } from '../lib/api';
 import { useCareer } from '../lib/context';
+import { Link } from 'react-router-dom';
 import { Async, Badge, Card, Empty, PageHeader, Tabs } from '../components/ui';
 
 export function HistoryPage() {
   const career = useCareer();
   const state = useApi<any>(`/careers/${career.id}/history`, [career.tick]);
   const news = useApi<any>(`/careers/${career.id}/news`, [career.tick]);
-  const [tab, setTab] = useState<'chronicle' | 'timeline' | 'seasons' | 'records' | 'hof' | 'news'>('seasons');
+  const [tab, setTab] = useState<'chronicle' | 'timeline' | 'archive' | 'seasons' | 'records' | 'hof' | 'news'>('seasons');
   const hasChronicle = !!state.data?.chronicles?.length;
   useEffect(() => { if (hasChronicle) setTab('chronicle'); }, [hasChronicle]);
   const o = career.overview.data;
@@ -16,7 +17,7 @@ export function HistoryPage() {
     <div className="space-y-5">
       <PageHeader kicker="Legacy" title="History" subtitle="Every headline, record and trophy here comes from a real event in this career." />
       {o?.phase === 'offseason' && <div className="rounded-xl border border-lime/40 bg-lime/5 p-4 text-sm">The season is over. Review the awards and champions, then press <b>Begin off-season</b> in the top bar to develop players, update reputations and open retentions.</div>}
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'chronicle', label: 'Season chronicle' }, { id: 'timeline', label: 'Career timeline' }, { id: 'seasons', label: 'Seasons & awards' }, { id: 'records', label: 'Records & rivalries' }, { id: 'hof', label: 'Hall of Fame' }, { id: 'news', label: 'News archive' }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'chronicle', label: 'Season chronicle' }, { id: 'timeline', label: 'Career timeline' }, { id: 'archive', label: 'Match archive' }, { id: 'seasons', label: 'Seasons & awards' }, { id: 'records', label: 'Records & rivalries' }, { id: 'hof', label: 'Hall of Fame' }, { id: 'news', label: 'News archive' }]} />
       <Async state={state}>
         {(d) => (
           <>
@@ -95,6 +96,7 @@ export function HistoryPage() {
                 ))}
               </div>
             ) : <Empty title="The first chronicle is written at season's end">Every chapter is assembled from what actually happened: results, signings, debuts, injuries and records.</Empty>)}
+            {tab === 'archive' && <MatchArchive seasons={[...new Set([career.overview.data?.season, ...d.seasons.map((x: any) => x.season)].filter(Boolean))] as number[]} />}
             {tab === 'timeline' && (
               <Card title="Career timeline">
                 {d.timeline.length ? (
@@ -132,5 +134,34 @@ export function HistoryPage() {
         )}
       </Async>
     </div>
+  );
+}
+
+/** Every match your club played, by season, linking to its Post-Match Centre report. */
+function MatchArchive({ seasons }: { seasons: number[] }) {
+  const career = useCareer();
+  const sorted = [...seasons].sort((a, b) => b - a);
+  const [picked, setSeason] = useState<number | null>(null);
+  const season = picked ?? sorted[0] ?? null;
+  const state = useApi<any>(season ? `/careers/${career.id}/archive?season=${season}` : null, [season, career.tick]);
+  return (
+    <Card title={<span className="flex items-center gap-3">Match archive <select aria-label="Season" className="input w-auto py-1 text-sm" value={season ?? ''} onChange={(e) => setSeason(Number(e.target.value))}>{sorted.map((x) => <option key={x} value={x}>{x}</option>)}</select></span>} pad={false}>
+      <Async state={state}>
+        {(a) => a.matches.length ? (
+          <ul className="divide-y divide-obsidian-800">
+            {a.matches.map((m: any) => (
+              <li key={m.fixtureId}>
+                <Link to={`/c/${career.id}/fixtures/${m.fixtureId}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm hover:bg-obsidian-850">
+                  <span className="w-20 shrink-0 text-xs text-ink-muted">{m.day !== null ? dayLabel(m.season, m.day) : m.season}</span>
+                  <span className="min-w-[200px] flex-1"><b className={m.winnerClubId === m.home.clubId ? 'text-ink' : 'text-ink-muted'}>{m.home.shortName}</b> v <b className={m.winnerClubId === m.away.clubId ? 'text-ink' : 'text-ink-muted'}>{m.away.shortName}</b> <span className="text-xs text-ink-faint">{m.stage}</span></span>
+                  <span className="num text-ink-muted">{m.scores.map((x: any) => `${x.runs}/${x.wickets}`).join(' · ')}</span>
+                  <span className="text-xs">{m.result}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="p-4 text-sm text-ink-muted">No recorded matches for this season.</p>}
+      </Async>
+    </Card>
   );
 }

@@ -15,7 +15,8 @@ import { OverviewPage } from './pages/Overview';
 import { SquadPage } from './pages/Squad';
 import { TacticsPage } from './pages/Tactics';
 import { MatchCentrePage } from './pages/MatchCentre';
-import { FixturesPage, MatchReportPage } from './pages/Fixtures';
+import { FixturesPage } from './pages/Fixtures';
+import { PostMatchPage } from './pages/PostMatch';
 import { TablePage } from './pages/Table';
 import { AuctionPage } from './pages/Auction';
 import { TransfersPage } from './pages/Transfers';
@@ -43,7 +44,7 @@ function CareerRoutes() {
             <Route path="tactics" element={<TacticsPage />} />
             <Route path="match" element={<MatchCentrePage />} />
             <Route path="fixtures" element={<FixturesPage />} />
-            <Route path="fixtures/:fid" element={<MatchReportPage />} />
+            <Route path="fixtures/:fid" element={<PostMatchPage />} />
             <Route path="table" element={<TablePage />} />
             <Route path="auction" element={<AuctionPage />} />
             <Route path="transfers" element={<TransfersPage />} />

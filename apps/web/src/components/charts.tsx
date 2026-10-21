@@ -1,6 +1,6 @@
 /** Lightweight SVG charts for the broadcast views. Each chart has a text summary for screen readers. */
 
-const COLORS = ['#c6ff1a', '#4cc3ff'];
+const COLORS = ['rgb(var(--accent))', 'rgb(var(--info))'];
 
 export function Worm({ innings, labels, overs = 20 }: { innings: number[][]; labels: string[]; overs?: number }) {
   const cum = innings.map((runs) => runs.reduce<number[]>((acc, r) => [...acc, (acc[acc.length - 1] ?? 0) + r], [0]));
@@ -14,11 +14,11 @@ export function Worm({ innings, labels, overs = 20 }: { innings: number[][]; lab
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`Worm chart: ${labels.map((l, i) => `${l} ${cum[i][cum[i].length - 1]}`).join(', ')}`}>
         {[0, 0.25, 0.5, 0.75, 1].map((t) => (
           <g key={t}>
-            <line x1={28} x2={W - 8} y1={y(max * t)} y2={y(max * t)} stroke="#1e2128" />
-            <text x={24} y={y(max * t) + 3} textAnchor="end" fontSize="7" fill="#6b7280">{Math.round(max * t)}</text>
+            <line x1={28} x2={W - 8} y1={y(max * t)} y2={y(max * t)} stroke="rgb(var(--line))" />
+            <text x={24} y={y(max * t) + 3} textAnchor="end" fontSize="7" fill="rgb(var(--text-faint))">{Math.round(max * t)}</text>
           </g>
         ))}
-        {[0, 5, 10, 15, 20].map((o) => <text key={o} x={x(o)} y={H - 6} textAnchor="middle" fontSize="7" fill="#6b7280">{o}</text>)}
+        {[0, 5, 10, 15, 20].map((o) => <text key={o} x={x(o)} y={H - 6} textAnchor="middle" fontSize="7" fill="rgb(var(--text-faint))">{o}</text>)}
         {cum.map((c, i) => (
           <polyline key={i} fill="none" stroke={COLORS[i]} strokeWidth="1.8" points={c.map((r, o) => `${x(o)},${y(r)}`).join(' ')} />
         ))}
@@ -42,11 +42,11 @@ export function Manhattan({ runs, wickets, label }: { runs: number[]; wickets: n
           const h = (r / max) * (H - 30);
           return (
             <g key={i}>
-              <rect x={24 + i * bw + 1} y={H - 16 - h} width={bw - 2} height={h} fill={r >= 12 ? '#c6ff1a' : '#3a3f4a'} rx="1">
+              <rect x={24 + i * bw + 1} y={H - 16 - h} width={bw - 2} height={h} fill={r >= 12 ? 'rgb(var(--accent))' : 'rgb(var(--line-stronger))'} rx="1">
                 <title>{`Over ${i + 1}: ${r} runs${wickets[i] ? `, ${wickets[i]} wkt` : ''}`}</title>
               </rect>
-              {Array.from({ length: wickets[i] ?? 0 }, (_, k) => <circle key={k} cx={24 + i * bw + bw / 2} cy={H - 20 - h - k * 5} r="1.8" fill="#ff5c5c" />)}
-              {(i + 1) % 5 === 0 && <text x={24 + i * bw + bw / 2} y={H - 5} textAnchor="middle" fontSize="7" fill="#6b7280">{i + 1}</text>}
+              {Array.from({ length: wickets[i] ?? 0 }, (_, k) => <circle key={k} cx={24 + i * bw + bw / 2} cy={H - 20 - h - k * 5} r="1.8" fill="rgb(var(--danger))" />)}
+              {(i + 1) % 5 === 0 && <text x={24 + i * bw + bw / 2} y={H - 5} textAnchor="middle" fontSize="7" fill="rgb(var(--text-faint))">{i + 1}</text>}
             </g>
           );
         })}
@@ -65,8 +65,8 @@ export function WinProb({ points, home, away }: { points: number[]; home: string
   return (
     <figure>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label={`Win probability: ${home} ${Math.round(last * 100)}%, ${away} ${Math.round((1 - last) * 100)}%`}>
-        <line x1={0} x2={W} y1={y(0.5)} y2={y(0.5)} stroke="#2a2e37" strokeDasharray="3 3" />
-        <polyline fill="none" stroke="#c6ff1a" strokeWidth="1.6" points={points.map((p, i) => `${x(i)},${y(p)}`).join(' ')} />
+        <line x1={0} x2={W} y1={y(0.5)} y2={y(0.5)} stroke="rgb(var(--line-strong))" strokeDasharray="3 3" />
+        <polyline fill="none" stroke="rgb(var(--accent))" strokeWidth="1.6" points={points.map((p, i) => `${x(i)},${y(p)}`).join(' ')} />
       </svg>
       <figcaption className="flex justify-between text-xs text-ink-muted">
         <span>{home} {Math.round(last * 100)}%</span>
@@ -76,7 +76,7 @@ export function WinProb({ points, home, away }: { points: number[]; home: string
   );
 }
 
-export function Sparkline({ values, width = 120, height = 32, color = '#c6ff1a' }: { values: number[]; width?: number; height?: number; color?: string }) {
+export function Sparkline({ values, width = 120, height = 32, color = 'rgb(var(--accent))' }: { values: number[]; width?: number; height?: number; color?: string }) {
   if (values.length < 2) return null;
   const min = Math.min(...values);
   const max = Math.max(...values);

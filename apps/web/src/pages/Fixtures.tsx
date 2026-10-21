@@ -4,7 +4,6 @@ import { api, dayLabel, useApi } from '../lib/api';
 import { useCareer, useToast } from '../lib/context';
 import { Async, Badge, Card, Empty, Modal, PageHeader, Tabs } from '../components/ui';
 import { Scorecard } from '../components/Scorecard';
-import { MatchCharts } from './MatchCentre';
 
 export function FixtureRow({ f, season, userClubId }: { f: any; season: number; userClubId?: string }) {
   const { id } = useCareer();
@@ -25,7 +24,7 @@ export function FixtureRow({ f, season, userClubId }: { f: any; season: number; 
           <span className="num text-ink-muted">{r.innings.map((i: any) => `${i.runs}/${i.wickets}`).join(' · ')}</span>
           <span className="text-xs text-ink-muted">{r.margin}{r.superOver ? ' (super over)' : ''}</span>
           {f.involvesUser && <Badge tone={won ? 'lime' : lost ? 'danger' : 'warn'}>{won ? 'Won' : lost ? 'Lost' : 'Tied'}</Badge>}
-          <Link to={`/c/${id}/fixtures/${f.id}`} className="text-xs text-lime hover:underline">Scorecard</Link>
+          <Link to={`/c/${id}/fixtures/${f.id}`} className="text-xs text-lime hover:underline">Match report</Link>
         </>
       ) : (
         <span className="text-xs text-ink-faint">{f.status === 'live' ? 'In progress' : f.venue}</span>
@@ -58,62 +57,7 @@ export function FixturesPage() {
   );
 }
 
-export function MatchReportPage() {
-  const { fid } = useParams();
-  const career = useCareer();
-  const nav = useNavigate();
-  const toast = useToast();
-  const state = useApi<any>(`/careers/${career.id}/fixtures/${fid}`, [fid]);
-  const [tab, setTab] = useState<'card' | 'charts' | 'balls'>('card');
-  return (
-    <Async state={state}>
-      {(d) => {
-        const f = d.fixture;
-        const m = d.match;
-        return (
-          <div className="space-y-5">
-            <PageHeader
-              title={`${f.home} v ${f.away}`}
-              subtitle={`${f.competition} · ${f.stage} · ${f.venue}${m ? ` · seed ${m.seed} · engine ${m.engineVersion}` : ''}`}
-              actions={m && m.setup.userSide ? (
-                <LabLauncher
-                  deliveries={m.deliveries}
-                  onStart={async (seq) => {
-                    try {
-                      await api(`/careers/${career.id}/lab/start`, { body: { fixtureId: f.id, fromSeq: seq } });
-                      nav(`/c/${career.id}/lab`);
-                    } catch (e) {
-                      toast.push('error', (e as Error).message);
-                    }
-                  }}
-                />
-              ) : undefined}
-            />
-            {f.result && (
-              <Card>
-                <div className="font-display text-2xl font-bold uppercase">{f.result.winnerId ? `${f.result.winnerId === f.homeId ? f.homeName : f.awayName} ${f.result.margin}` : f.result.margin}</div>
-                {f.result.playerOfMatch && <p className="text-sm text-ink-muted">Player of the match: {f.result.playerOfMatch.name}</p>}
-                {d.result && <p className="text-xs text-ink-faint">Toss: {d.result.tossWinnerId === f.homeId ? f.homeName : f.awayName} chose to {d.result.tossDecision}.</p>}
-              </Card>
-            )}
-            {m ? (
-              <>
-                <Tabs value={tab} onChange={setTab} tabs={[{ id: 'card', label: 'Scorecard' }, { id: 'charts', label: 'Charts' }, { id: 'balls', label: 'Ball by ball' }]} />
-                {tab === 'card' && <Card><Scorecard state={m} /></Card>}
-                {tab === 'charts' && <MatchCharts state={m} deliveries={m.deliveries} />}
-                {tab === 'balls' && <BallByBall m={m} />}
-              </>
-            ) : (
-              <Empty title="No detailed record">{f.status === 'complete' ? 'This match predates detailed records.' : 'This match has not been played yet.'}</Empty>
-            )}
-          </div>
-        );
-      }}
-    </Async>
-  );
-}
-
-function LabLauncher({ deliveries, onStart }: { deliveries: any[]; onStart: (seq: number) => void }) {
+export function LabLauncher({ deliveries, onStart }: { deliveries: any[]; onStart: (seq: number) => void }) {
   const [open, setOpen] = useState(false);
   const [i, setI] = useState(Math.floor(deliveries.length / 2));
   const d = deliveries[i];
@@ -134,7 +78,7 @@ function LabLauncher({ deliveries, onStart }: { deliveries: any[]; onStart: (seq
   );
 }
 
-function BallByBall({ m }: { m: any }) {
+export function BallByBall({ m }: { m: any }) {
   const [inn, setInn] = useState(0);
   const list = useMemo(() => m.deliveries.filter((d: any) => d.innings === inn), [m, inn]);
   return (

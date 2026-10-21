@@ -11,7 +11,9 @@ import {
   type LiveCommand, type MatchRecord,
 } from '@kurciv/world';
 import { auctionRoomView, auctionSummary, userAuctionOf } from './auction-view';
-import { clubhouse } from './clubhouse';
+import { clubhouse, qualificationOdds } from './clubhouse';
+import { buildMatchReport } from './report/match-report';
+import { archiveEntry } from './report/archive';
 import { opponentReport } from './intel';
 import { rebuildTo, runSteps, type StepMode } from './match';
 import { ConflictError, GAME_VERSION, SAVE_SCHEMA_VERSION, type CareerMeta, type LiveMatch, type MatchRow, type PersistenceAdapter } from './persistence';
@@ -396,6 +398,24 @@ export class Backend {
       return { fixture: fixtureView(w, f), result: f.result, match: record ? liveView(record) : null };
     });
 
+    // -------- post-match centre (built on this device from the stored, immutable match record)
+    r('GET', '/careers/:cid/fixtures/:fid/report', async ({ params }) => {
+      const { world: w } = await this.load(params.cid);
+      const record = await this.store.getRecord(params.cid, params.fid);
+      if (!record) throw new AppError(404, 'No recorded match for this fixture yet.');
+      const fixture = w.fixtures[params.fid] ?? null;
+      return buildMatchReport(record, { world: w, fixture, season: fixture?.season ?? w.season });
+    });
+
+    r('GET', '/careers/:cid/archive', async ({ params, query }) => {
+      const { world: w } = await this.load(params.cid);
+      const { season, club } = parse(z.object({ season: z.coerce.number().int().min(2000).max(2200).default(w.season), club: id.optional() }), { season: query.get('season') ?? undefined, club: query.get('club') ?? undefined });
+      const clubId = club ?? w.userClubId;
+      if (!w.clubs[clubId]) throw new AppError(404, 'Club not found.');
+      const records = await this.store.seasonRecords(params.cid, season, [clubId]);
+      return { season, clubId, matches: records.map((s) => archiveEntry(w, s, season)).sort((a, b) => (b.day ?? 0) - (a.day ?? 0)) };
+    });
+
     r('GET', '/careers/:cid/world', ({ params }) => this.view(params.cid, (w) => {
       const path = qualificationPath(w);
       const total = path.reduce((s, p) => s + p.slots, 0);
@@ -771,6 +791,7 @@ export class Backend {
         if (fx.day !== w.day) throw new AppError(400, 'Advance to match day first.');
         const state = simulateMatch(buildMatchSetup(w, fx), matchSeed(w, fx));
         completeUserFixture(w, fx.id, state);
+        recordOdds(w, fx.id);
         return { result: { fixture: fixtureView(w, fx) }, records: [{ fixtureId: fx.id, state }] };
       });
     });
@@ -860,6 +881,7 @@ export class Backend {
         if (fx.status === 'complete') return { result: { fixture: fixtureView(w, fx), duplicate: true } };
         fx.status = 'scheduled';
         completeUserFixture(w, fx.id, live.data.state);
+        recordOdds(w, fx.id);
         return { result: { fixture: fixtureView(w, fx) }, records: [{ fixtureId: fx.id, state: live.data.state }] };
       });
       await this.store.deleteLive(params.cid, 'main');
@@ -926,3 +948,9 @@ function compact(s: MatchState): MatchState {
   return { ...s, deliveries: s.deliveries.map((d) => ({ ...d, pressure: { batter: d.pressure.batter, bowler: d.pressure.bowler, reasons: [] } })) };
 }
 
+
+/** Stores the post-match qualification estimate on the match's impact snapshot. */
+function recordOdds(w: WorldState, fixtureId: string) {
+  const m = w.matchImpacts?.[fixtureId];
+  if (m) m.odds = qualificationOdds(w);
+}

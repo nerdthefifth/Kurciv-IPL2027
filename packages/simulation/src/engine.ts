@@ -1,4 +1,5 @@
 import type { BowlingPlan, FieldPoint, Length, Line } from '@kurciv/domain';
+import { choosePlayerOfMatch } from './award';
 import { isSpin, speedScore } from '@kurciv/domain';
 import { SIM } from '@kurciv/config';
 import { Rng, clamp, sigmoid } from './rng';
@@ -1179,28 +1180,7 @@ function finishMatch(s: MatchState, winner: Side | null, last: InningsState, not
   s.result.playerOfMatch = playerOfMatch(s);
 }
 
+/** Player of the Match from the configurable contribution model (see award.ts). */
 export function playerOfMatch(s: MatchState): string | null {
-  const score: Record<string, number> = {};
-  for (const inn of s.innings) {
-    if (inn.superOver) continue;
-    for (const b of Object.values(inn.batters)) {
-      const sr = b.balls ? (b.runs / b.balls) * 100 : 0;
-      score[b.playerId] = (score[b.playerId] ?? 0) + b.runs + Math.max(0, (sr - 130) * b.runs) / 400 + b.sixes * 1.5;
-    }
-    for (const w of Object.values(inn.bowlers)) {
-      const econ = w.balls ? (w.runs / w.balls) * 6 : 12;
-      score[w.playerId] = (score[w.playerId] ?? 0) + w.wickets * 22 + (w.balls >= 12 ? (8.5 - econ) * 4 : 0) + w.dots * 0.5;
-    }
-  }
-  const winner = s.result?.winner ?? null;
-  let best: string | null = null;
-  let bs = -Infinity;
-  for (const [id, v] of Object.entries(score)) {
-    const bonus = winner && sideOfPlayer(s, id) === winner ? 10 : 0;
-    if (v + bonus > bs) {
-      bs = v + bonus;
-      best = id;
-    }
-  }
-  return best;
+  return choosePlayerOfMatch(s);
 }

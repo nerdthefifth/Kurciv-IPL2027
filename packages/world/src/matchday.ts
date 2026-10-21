@@ -8,6 +8,7 @@ import { applyMatchLoad, rollInjury, updateForm, updateMorale } from './conditio
 import { matchdayIncome } from './finance';
 import { addNews, clamp, squadOf, worldRng } from './util';
 import { addTimeline, storiesAfterUserMatch } from './story';
+import { beginImpact, completeImpact } from './impact';
 
 const DIFFICULTY_QUALITY = { rookie: 0.35, professional: 0.55, elite: 0.72, legend: 0.88 } as const;
 
@@ -146,6 +147,7 @@ function eloUpdate(w: WorldState, fx: Fixture, winnerId: string | null) {
 export function applyMatch(w: WorldState, fx: Fixture, s: MatchState) {
   if (fx.status === 'complete') throw new Error(`Fixture ${fx.id} already finalised`);
   if (s.status !== 'complete') throw new Error('Match not complete');
+  const impact = beginImpact(w, fx);
   const summary = summarise(s, fx);
   fx.status = 'complete';
   fx.result = summary;
@@ -286,6 +288,7 @@ export function applyMatch(w: WorldState, fx: Fixture, s: MatchState) {
       clubIds: [u.id, opp.id], playerIds: summary.playerOfMatch ? [summary.playerOfMatch] : [], sourceRef: fx.id,
     });
   }
+  if (impact) completeImpact(w, fx, impact, xiIds);
 }
 
 function updateRivalry(w: WorldState, fx: Fixture, winnerId: string | null) {

@@ -366,3 +366,9 @@ export async function clearImageCache() {
   memory.clear();
   await media()?.images.clear().catch(() => {});
 }
+
+/** Cached entry for a key (memory or this device's image cache), without fetching anything new. */
+export async function cachedImage(key: string): Promise<ImageEntry | null> {
+  if (!enabled) return null;
+  return cached(key);
+}

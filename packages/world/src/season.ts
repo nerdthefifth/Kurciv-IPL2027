@@ -15,6 +15,7 @@ import { aiInjuryCover } from './transfers';
 import { allocateForWorld, createWCC, progressWCC, updateReputations } from './wcc';
 import { roleDemand } from './auction-live';
 import { addTimeline, buildChronicle, storiesDaily, storyAuctionEve } from './story';
+import { pruneImpacts } from './impact';
 
 export interface MatchRecord {
   fixtureId: string;
@@ -366,6 +367,7 @@ export function endSeason(w: WorldState) {
   w.season += 1;
   w.day = 20;
   w.appearances = {};
+  pruneImpacts(w);
   w.phase = 'retention';
   for (const c of Object.values(w.clubs)) {
     c.retentionsLocked = false;

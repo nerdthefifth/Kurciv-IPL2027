@@ -50,6 +50,7 @@ export function migrateWorld(world: WorldState, from: number): WorldState {
     w.storyKeys ??= {};
     w.appearances ??= {};
   }
+  if (from < 3) w.matchImpacts ??= {};
   w.schemaVersion = SAVE_SCHEMA_VERSION;
   return w;
 }

@@ -7,8 +7,8 @@ import type { MatchState } from '@kurciv/simulation';
  * could implement it remotely. Every method that writes is atomic.
  */
 
-export const SAVE_SCHEMA_VERSION = 2;
-export const GAME_VERSION = '0.2.0';
+export const SAVE_SCHEMA_VERSION = 3;
+export const GAME_VERSION = '0.3.0';
 
 export interface CareerMeta {
   id: string;

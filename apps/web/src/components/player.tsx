@@ -135,6 +135,7 @@ function AttrGroup({ group, p }: { group: 'bat' | 'bowl' | 'field' | 'mental' | 
 function PlayerProfile({ id, onClose }: { id: string; onClose: () => void }) {
   const career = useCareer();
   const state = useApi<any>(`/careers/${career.id}/players/${id}`, [career.tick, id]);
+  const nav = useNavigate();
   const [tab, setTab] = useState<Tab>('overview');
   return (
     <Modal open title="Player profile" onClose={onClose} wide>
@@ -185,7 +186,7 @@ function PlayerProfile({ id, onClose }: { id: string; onClose: () => void }) {
                   {p.matchLog.length ? (
                     <table className="table">
                       <thead><tr><th>Opp</th><th>Stage</th><th className="text-right">Bat</th><th className="text-right">Bowl</th></tr></thead>
-                      <tbody>{p.matchLog.map((m: any) => <tr key={m.fixtureId}><td>{m.won ? '✓ ' : ''}{m.opponent}</td><td className="text-ink-muted">{m.stage}</td><td className="num text-right">{m.bat ? `${m.bat.runs}${m.bat.out ? '' : '*'} (${m.bat.balls})` : '—'}</td><td className="num text-right">{m.bowl ? `${m.bowl.wickets}/${m.bowl.runs}` : '—'}</td></tr>)}</tbody>
+                      <tbody>{p.matchLog.map((m: any) => <tr key={m.fixtureId}><td><button className="text-left hover:text-lime hover:underline" onClick={() => { onClose(); nav(`/c/${career.id}/fixtures/${m.fixtureId}`); }} title="Open the match report">{m.won ? '✓ ' : ''}{m.opponent}</button></td><td className="text-ink-muted">{m.stage}</td><td className="num text-right">{m.bat ? `${m.bat.runs}${m.bat.out ? '' : '*'} (${m.bat.balls})` : '—'}</td><td className="num text-right">{m.bowl ? `${m.bowl.wickets}/${m.bowl.runs}` : '—'}</td></tr>)}</tbody>
                     </table>
                   ) : <p className="text-sm text-ink-muted">No Kurciv matches yet.</p>}
                   {p.matchLog.length > 2 && <div className="mt-2"><Sparkline values={[...p.matchLog].reverse().map((m: any) => (m.bat?.runs ?? 0) + (m.bowl?.wickets ?? 0) * 20)} width={200} /></div>}
