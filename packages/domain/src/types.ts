@@ -244,6 +244,14 @@ export interface TacticalDNA {
   samples: number;
 }
 
+export type TrainingFocus = 'balanced' | 'batting' | 'pace' | 'spin' | 'fielding' | 'fitness';
+
+export interface TrainingPlan {
+  intensity: 'light' | 'normal' | 'intense';
+  focus: TrainingFocus;
+  individual: Record<string, TrainingFocus>;
+}
+
 export interface Club {
   id: Id;
   name: string;
@@ -271,8 +279,11 @@ export interface Club {
   fieldTemplates: FieldTemplate[];
   defaultTactics: TeamTactics;
   retentionsLocked: boolean;
+  training: TrainingPlan;
   /** Ids of players the club has flagged as retained for the upcoming season. */
   retentionChoices: Id[];
+  /** User-picked XI in batting order (null = let the assistant pick). */
+  lineup: string[] | null;
 }
 
 // ---------------------------------------------------------------- fields
@@ -483,6 +494,10 @@ export interface AuctionLot {
   price: number | null;
   round: 1 | 2;
   flaggedByUser?: boolean;
+  /** User has dropped out of this lot. */
+  userOut?: boolean;
+  /** Hidden AI ceilings — server-side only, stripped before reaching the client. */
+  aiMax?: Record<string, number>;
 }
 
 export interface AiDecisionNote {

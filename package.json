@@ -15,6 +15,7 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "lab": "tsx tools/sim-lab.ts",
+    "world-report": "tsx tools/world-report.ts",
     "validate-data": "tsx packages/data-ingestion/src/cli.ts"
   },
   "devDependencies": {

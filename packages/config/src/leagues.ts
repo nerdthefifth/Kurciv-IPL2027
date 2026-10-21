@@ -240,3 +240,9 @@ export const COUNTRY_NAMES: Record<CountryCode, string> = {
   BAN: 'Bangladesh', WI: 'West Indies', AFG: 'Afghanistan', IRE: 'Ireland', ZIM: 'Zimbabwe', NED: 'Netherlands', SCO: 'Scotland',
   USA: 'USA', NEP: 'Nepal', UAE: 'UAE', NAM: 'Namibia', OMA: 'Oman', CAN: 'Canada',
 };
+
+/**
+ * Export restrictions: players from these countries may only be registered in the listed
+ * leagues (e.g. Indian players do not play in overseas franchise leagues). Configurable.
+ */
+export const EXPORT_RESTRICTIONS: Partial<Record<CountryCode, string[]>> = { IND: ['IPL'] };

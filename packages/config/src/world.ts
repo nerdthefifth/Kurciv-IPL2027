@@ -5,13 +5,13 @@ export const WORLD = {
 
   reputation: {
     /** Learning rate applied to the (actual − expected) performance residual. */
-    learningRate: 6,
+    learningRate: 4,
     /** Weight of each WCC stage when computing a league's residual. */
     stageWeights: { prelim: 0.6, group: 1, knockout: 1.6, final: 2.2 } as Record<string, number>,
     /** Mean-reversion toward each league's structural strength (commercial + depth), per season. */
-    reversion: 0.06,
+    reversion: 0.04,
     /** Maximum change in a single season. */
-    maxDelta: 6,
+    maxDelta: 4,
     /** Club quality component: how much the average squad strength drift moves reputation. */
     squadQualityWeight: 0.25,
     min: 0,
