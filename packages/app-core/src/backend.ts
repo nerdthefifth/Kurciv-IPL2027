@@ -546,7 +546,7 @@ export class Backend {
     // In-room commands are validated before anything changes. Bids, passes and pauses are saved
     // like clock ticks (soon, not synchronously) so the room stays responsive; anything that
     // completes a transaction or edits the shortlist is committed before success is reported.
-    const COMMIT_NOW = new Set<LiveCommand['type']>(['begin', 'proxy', 'flag', 'skip-lot', 'accelerated-toggle', 'accelerated-start']);
+    const COMMIT_NOW = new Set<LiveCommand['type']>(['begin', 'pause', 'proxy', 'flag', 'skip-lot', 'accelerated-toggle', 'accelerated-start']);
     r('POST', '/careers/:cid/auction/command', async ({ params, body }) => {
       const cmd = parse(command, body?.command) as LiveCommand;
       return this.withLock(params.cid, async () => {

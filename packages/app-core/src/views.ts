@@ -23,7 +23,7 @@ export function playerView(w: WorldState, p: Player, opts: { detail?: boolean } 
   const base = {
     id: p.id, name: p.name, shortName: p.shortName, country: p.country, countryName: COUNTRY_NAMES[p.country], age: ageOf(p, w.season),
     ageConfidence: p.ageConfidence, role: p.role, batHand: p.batHand, bowlType: p.bowlType, capped: p.capped, source: p.source, tags: p.styleTags,
-    ovr: own ? Math.round(overall(p)) : Math.round((range.lo + range.hi) / 2), range, potential: potentialRange(p, viewer.facilities.scouting),
+    ovr: own ? Math.round(overall(p)) : Math.round((range.lo + range.hi) / 2), range, potential: (() => { const pr = potentialRange(p, viewer.facilities.scouting); return { ...pr, lo: Math.max(pr.lo, range.lo) }; })(),
     batting: r(battingRating(p.attrs)), bowling: r(bowlingRating(p.attrs, p.bowlType)), fielding: r(fieldingRating(p.attrs)),
     form: own ? p.form : null, fatigue: Math.round(p.fatigue), morale: own ? Math.round(p.morale) : null,
     injury: p.injury ? { type: p.injury.type, severity: p.injury.severity, daysRemaining: Math.ceil(p.injury.daysRemaining), expected: `${p.injury.expectedDaysMin}–${p.injury.expectedDaysMax} days` } : null,

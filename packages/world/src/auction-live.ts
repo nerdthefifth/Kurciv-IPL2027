@@ -3,7 +3,7 @@ import { marketValue, overall } from '@kurciv/domain';
 import { leagueById } from '@kurciv/config';
 import { hash01 } from '@kurciv/simulation';
 import {
-  advanceCascade, categoryOf, closeLot, createLiveState, endRound, escalate, increment, leader, nextBid, openLot, priceScale, roleTargets, validBidFor,
+  auctionEstimate, advanceCascade, categoryOf, closeLot, createLiveState, endRound, escalate, increment, leader, nextBid, openLot, priceScale, roleTargets, validBidFor,
 } from './auction';
 import { clubsInLeague, formatCr, round2, squadOf } from './util';
 
@@ -181,7 +181,7 @@ function resolveLot(w: WorldState, a: AuctionState, live: Live) {
   const lot = currentLot(a)!;
   const p = w.players[lot.playerId];
   const l = leagueById(a.leagueId);
-  const estimate = round2(marketValue(p, w.season) * priceScale(l));
+  const estimate = auctionEstimate(p, w.season, l);
   const contenders = [...live.bidders];
   const ceilings = { ...(lot.aiMax ?? {}) };
   const reason = leader(lot) ? null : unsoldReason(w, a, lot);

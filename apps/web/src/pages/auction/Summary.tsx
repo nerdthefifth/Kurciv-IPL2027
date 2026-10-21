@@ -33,7 +33,7 @@ export function AuctionSummary() {
             <Tabs value={tab} onChange={setTab} tabs={[{ id: 'mine', label: 'Your auction' }, { id: 'clubs', label: 'Every franchise' }, { id: 'market', label: 'Market moments' }]} />
 
             {tab === 'mine' && mine && (
-              <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
                 <div className="card overflow-hidden">
                   <table className="table">
                     <thead><tr><th>Signing</th><th>Role</th><th className="text-right">Price</th><th className="text-right">Estimate</th><th className="text-right">Value</th></tr></thead>

@@ -57,7 +57,7 @@ export function TablePage() {
       />
       <Async state={state}>
         {(d) => (
-          <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
             <Card title={d.competition?.name ?? d.league.name} actions={<span className="text-xs text-ink-muted">Reputation {d.state.reputation.toFixed(1)} · {d.state.wccSlots} WCC places · playoffs: {d.league.playoffs}</span>}>
               {d.table.length ? <StandingsTable rows={d.table} highlight={d.league.playoffs === 'ipl4' || d.league.playoffs === 'semis' ? 4 : 2} slots={d.state.wccSlots} /> : <Empty title="Season not started">The table appears once fixtures begin.</Empty>}
               <p className="mt-3 text-xs text-ink-faint">Two points for a win, one for a tie. Ties on points are separated by net run rate; a side bowled out is charged its full 20 overs.</p>

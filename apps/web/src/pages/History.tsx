@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { dayLabel } from '../lib/api';
 import { useApi } from '../lib/api';
 import { useCareer } from '../lib/context';
 import { Async, Badge, Card, Empty, PageHeader, Tabs } from '../components/ui';
@@ -7,13 +8,15 @@ export function HistoryPage() {
   const career = useCareer();
   const state = useApi<any>(`/careers/${career.id}/history`, [career.tick]);
   const news = useApi<any>(`/careers/${career.id}/news`, [career.tick]);
-  const [tab, setTab] = useState<'seasons' | 'records' | 'hof' | 'chronicle'>('seasons');
+  const [tab, setTab] = useState<'chronicle' | 'timeline' | 'seasons' | 'records' | 'hof' | 'news'>('seasons');
+  const hasChronicle = !!state.data?.chronicles?.length;
+  useEffect(() => { if (hasChronicle) setTab('chronicle'); }, [hasChronicle]);
   const o = career.overview.data;
   return (
     <div className="space-y-5">
-      <PageHeader title="History" subtitle="Every headline, record and trophy here comes from a real event in this career." />
+      <PageHeader kicker="Legacy" title="History" subtitle="Every headline, record and trophy here comes from a real event in this career." />
       {o?.phase === 'offseason' && <div className="rounded-xl border border-lime/40 bg-lime/5 p-4 text-sm">The season is over. Review the awards and champions, then press <b>Begin off-season</b> in the top bar to develop players, update reputations and open retentions.</div>}
-      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'seasons', label: 'Seasons & awards' }, { id: 'records', label: 'Records & rivalries' }, { id: 'hof', label: 'Hall of Fame' }, { id: 'chronicle', label: 'Chronicle' }]} />
+      <Tabs value={tab} onChange={setTab} tabs={[{ id: 'chronicle', label: 'Season chronicle' }, { id: 'timeline', label: 'Career timeline' }, { id: 'seasons', label: 'Seasons & awards' }, { id: 'records', label: 'Records & rivalries' }, { id: 'hof', label: 'Hall of Fame' }, { id: 'news', label: 'News archive' }]} />
       <Async state={state}>
         {(d) => (
           <>
@@ -73,10 +76,45 @@ export function HistoryPage() {
                 {d.hallOfFame.length ? <ul className="space-y-2">{[...d.hallOfFame].reverse().map((h: any) => <li key={h.id} className="text-sm"><Badge tone="lime">{h.kind}</Badge> <b>{h.title}</b> <span className="text-ink-muted">— {h.detail} ({h.season})</span></li>)}</ul> : <Empty title="No legends yet">Dynasties, records and retired greats are inducted as they happen.</Empty>}
               </Card>
             )}
-            {tab === 'chronicle' && (
+            {tab === 'chronicle' && (d.chronicles.length ? (
+              <div className="space-y-6">
+                {[...d.chronicles].reverse().map((c: any) => (
+                  <article key={c.season} className="card grain p-6 md:p-8">
+                    <div className="kicker">Season chronicle · {c.season}</div>
+                    <h2 className="headline mt-2 text-3xl">{c.headline}</h2>
+                    <p className="mt-3 max-w-3xl text-ink-muted">{c.summary}</p>
+                    <div className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                      {c.sections.map((sec: any) => (
+                        <section key={sec.title}>
+                          <h3 className="label mb-2">{sec.title}</h3>
+                          <ul className="space-y-1.5 text-sm">{sec.items.map((it: string, i: number) => <li key={i} className="flex gap-2"><span className="text-ink-faint">—</span>{it}</li>)}</ul>
+                        </section>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : <Empty title="The first chronicle is written at season's end">Every chapter is assembled from what actually happened: results, signings, debuts, injuries and records.</Empty>)}
+            {tab === 'timeline' && (
+              <Card title="Career timeline">
+                {d.timeline.length ? (
+                  <ol className="relative space-y-4 border-l border-obsidian-700 pl-5">
+                    {d.timeline.map((t: any) => (
+                      <li key={t.id} className="relative">
+                        <span className="absolute -left-[25px] top-1.5 h-2.5 w-2.5 rounded-full bg-lime" aria-hidden />
+                        <div className="text-[11px] text-ink-faint">{dayLabel(t.season, t.day)} · {t.kind}</div>
+                        <div className="font-medium">{t.title}</div>
+                        {t.detail && <div className="text-sm text-ink-muted">{t.detail}</div>}
+                      </li>
+                    ))}
+                  </ol>
+                ) : <p className="text-sm text-ink-muted">Your story starts here.</p>}
+              </Card>
+            )}
+            {tab === 'news' && (
               <Async state={news}>
                 {(n) => (
-                  <Card title="World-state chronicle" pad={false}>
+                  <Card title="News archive" pad={false}>
                     <ul className="max-h-[70vh] divide-y divide-obsidian-800 overflow-y-auto">
                       {n.news.map((x: any) => (
                         <li key={x.id} className="px-4 py-3 text-sm">

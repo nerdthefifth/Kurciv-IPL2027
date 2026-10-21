@@ -16,12 +16,14 @@
     "build": "npm run build -w @kurciv/web",
     "preview": "npm run preview -w @kurciv/web",
     "test": "vitest run",
+    "e2e": "playwright test",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "lab": "tsx tools/sim-lab.ts",
     "world-report": "tsx tools/world-report.ts",
     "validate-data": "tsx packages/data-ingestion/src/cli.ts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.1",
     "@types/node": "22.10.2",
     "concurrently": "9.1.0",
     "fake-indexeddb": "^6.0.0",

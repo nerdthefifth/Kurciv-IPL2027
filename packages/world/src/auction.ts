@@ -20,6 +20,18 @@ export function priceScale(l: LeagueConfig): number {
   return l.auctionRules.purse / 120;
 }
 
+/**
+ * Expected hammer price. Calibrated against simulated auctions: fringe players (under ~1% of the
+ * purse in value) usually go near their base price, while anyone worth a franchise's attention
+ * draws competition and sells for roughly twice their raw value.
+ */
+export function auctionEstimate(p: Player, season: number, l: LeagueConfig): number {
+  const raw = marketValue(p, season) * priceScale(l);
+  const rel = raw / l.auctionRules.purse;
+  const t = Math.max(0, Math.min(1, (rel - 0.011) / 0.009));
+  return Math.round(raw * (0.52 + 1.63 * t) * 100) / 100;
+}
+
 export function increment(l: LeagueConfig, price: number): number {
   for (const t of l.auctionRules.increments) if (price < t.upTo) return t.step;
   return l.auctionRules.increments[l.auctionRules.increments.length - 1].step;
@@ -397,6 +409,15 @@ export function finishAuction(w: WorldState, a: AuctionState) {
   const l = leagueById(a.leagueId);
   a.status = 'complete';
   a.version++;
+  if (a.interactive) {
+    // The auction-eve story has played out.
+    for (const s of w.stories) {
+      if (s.status === 'active' && s.trigger === `auction-${w.season}`) {
+        s.status = 'resolved';
+        s.resolution = 'The auction is complete.';
+      }
+    }
+  }
   // AI clubs below the minimum squad sign the best remaining eligible free agents at minimum price.
   for (const c of clubsInLeague(w, l.id)) {
     if (c.id === w.userClubId) continue;

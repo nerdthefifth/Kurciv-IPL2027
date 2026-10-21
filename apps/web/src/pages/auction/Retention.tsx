@@ -51,7 +51,7 @@ export function RetentionCeremony() {
                 </>
               } />
 
-            <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                 {sorted.map((p: any) => {
                   const on = chosen.includes(p.id);

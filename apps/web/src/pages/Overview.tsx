@@ -39,7 +39,7 @@ export function OverviewPage() {
     <div className="space-y-6">
       <NextChapter o={o} />
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">
           {o.decisions.length > 0 && (
             <section aria-labelledby="decisions">

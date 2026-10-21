@@ -2,7 +2,7 @@ import type { AuctionState, Player, WorldState } from '@kurciv/domain';
 import { ageOf, canAfford, canRegister, isOverseas, marketValue, overall, reserveNeeded } from '@kurciv/domain';
 import { COUNTRY_NAMES, leagueById } from '@kurciv/config';
 import { pickXI } from '@kurciv/ai';
-import { AUCTION_TIMING, categoryOf, clubsInLeague, leader, nextBid, permittedBids, priceScale, roleDemand, roleTargets, squadOf, valuePlayer } from '@kurciv/world';
+import { AUCTION_TIMING, auctionEstimate, categoryOf, clubsInLeague, leader, nextBid, permittedBids, priceScale, roleDemand, roleTargets, squadOf, valuePlayer } from '@kurciv/world';
 import { playerView } from './views';
 
 const CAT_LABEL: Record<string, string> = { WK: 'Wicketkeepers', BAT: 'Batters', AR: 'All-rounders', PACE: 'Fast bowlers', SPIN: 'Spinners' };
@@ -86,7 +86,7 @@ export function auctionRoomView(w: WorldState, full = true) {
       dropped: live.dropped,
       proxy: a.userProxy[lot.playerId] ?? null,
       strategy: {
-        estimate: Math.round(marketValue(p, w.season) * scale * 100) / 100,
+        estimate: auctionEstimate(p, w.season, l),
         assistantMax: val.maxBid,
         assistantReason: val.reason,
         maxAffordable: Math.max(0, Math.round((user.purse - reserve) * 100) / 100),
@@ -154,7 +154,7 @@ export function auctionSummary(w: WorldState) {
   const l = leagueById(a.leagueId);
   const scale = priceScale(l);
   const sold = a.lots.filter((x) => x.status === 'sold');
-  const est = (pid: string) => Math.round(marketValue(w.players[pid], w.season) * scale * 100) / 100;
+  const est = (pid: string) => auctionEstimate(w.players[pid], w.season, l);
   const clubs = clubsInLeague(w, l.id).map((c) => {
     const sq = squadOf(w, c);
     const signings = sold.filter((x) => x.soldTo === c.id).map((x) => ({ playerId: x.playerId, name: w.players[x.playerId].name, role: w.players[x.playerId].role, price: x.price!, estimate: est(x.playerId) }));

@@ -68,7 +68,7 @@ function SquadView({ d }: { d: any }) {
           {d.problems.map((p: string) => <p key={p}>⚠ {p}</p>)}
         </div>
       )}
-      <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card title="Registered players" pad={false}>
           <DataTable rows={d.players} columns={cols} rowKey={(p) => p.id} initialSort={{ key: 'ovr', dir: -1 }} />
         </Card>

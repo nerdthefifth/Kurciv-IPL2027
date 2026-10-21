@@ -30,7 +30,7 @@ export function Lobby({ room, full, busy, command, sim }: { room: Room; full: Ro
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
           <section>
             <h2 className="h-section mb-3">Franchise tables</h2>

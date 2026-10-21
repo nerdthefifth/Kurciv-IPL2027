@@ -26,7 +26,7 @@ export function fixturePreview(w: WorldState, fx: Fixture): { stakes: string; li
     const rows = sortRows(comp.standings.main);
     const me = rows.findIndex((r) => r.clubId === u.id);
     const them = rows.findIndex((r) => r.clubId === oppId);
-    if (me >= 0 && them >= 0) {
+    if (me >= 0 && them >= 0 && rows[me].played + rows[them].played > 0) {
       lines.push(`${u.shortName} sit ${me + 1}${ord(me + 1)} on ${rows[me].points} points; ${opp.shortName} are ${them + 1}${ord(them + 1)} on ${rows[them].points}.`);
       const cut = leagueById(u.leagueId).playoffs === 'final2' ? 2 : 4;
       if (Math.abs(me - them) <= 2 && Math.min(me, them) < cut + 2) stakes = 'A direct rival in the playoff race';
