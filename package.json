@@ -10,9 +10,9 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "concurrently -k -n api,web -c green,cyan \"npm run dev -w @kurciv/server\" \"npm run dev -w @kurciv/web\"",
+    "dev": "npm run dev -w @kurciv/web",
     "build": "npm run build -w @kurciv/web",
-    "start": "npm run start -w @kurciv/server",
+    "preview": "npm run preview -w @kurciv/web",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "lab": "tsx tools/sim-lab.ts",

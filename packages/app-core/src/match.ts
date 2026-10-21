@@ -1,6 +1,6 @@
 import { AiCaptain } from '@kurciv/ai';
 import { applyAction, createMatch, currentInnings, step, type Controllers, type DeliveryEvent, type MatchState, type Pending } from '@kurciv/simulation';
-import type { LiveMatch } from './store';
+import type { LiveMatch } from './persistence';
 
 export type StepMode = 'ball' | 'over' | 'key' | 'innings' | 'end';
 

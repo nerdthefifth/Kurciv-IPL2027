@@ -50,7 +50,68 @@ export function playerView(w: WorldState, p: Player, opts: { detail?: boolean } 
     dataNote: p.source === 'curated'
       ? 'Real player identity. Ratings and age are Kurciv editorial estimates; statistics are from this career only.'
       : p.source === 'youth' ? 'Academy prospect generated in this career.' : 'Generated player — not a real person.',
+    matchLog: matchLog(w, p),
+    peers: peerPercentiles(w, p),
+    scouting: scoutingReport(w, p, own),
   };
+}
+
+/** The player's most recent matches, read from stored match summaries. */
+function matchLog(w: WorldState, p: Player) {
+  return Object.values(w.fixtures)
+    .filter((f) => f.result && f.result.innings.some((i) => i.batting.some((b) => b.playerId === p.id) || i.bowling.some((b) => b.playerId === p.id)))
+    .sort((a, b) => b.season - a.season || b.day - a.day)
+    .slice(0, 10)
+    .map((f) => {
+      const bat = f.result!.innings.flatMap((i) => i.batting).find((b) => b.playerId === p.id);
+      const bowl = f.result!.innings.flatMap((i) => i.bowling).find((b) => b.playerId === p.id);
+      const own = f.result!.innings.find((i) => i.batting.some((b) => b.playerId === p.id))?.battingClubId ?? (f.homeId === p.clubId ? f.homeId : f.awayId);
+      const oppId = own === f.homeId ? f.awayId : f.homeId;
+      return {
+        fixtureId: f.id, season: f.season, day: f.day, stage: f.stage, opponent: w.clubs[oppId]?.shortName ?? '?', won: f.result!.winnerId === own,
+        bat: bat ? { runs: bat.runs, balls: bat.balls, out: bat.out } : null,
+        bowl: bowl ? { wickets: bowl.wickets, runs: bowl.runs, balls: bowl.balls } : null,
+      };
+    });
+}
+
+/** Where the player ranks among active players in the same role (percentiles, 0–100). */
+function peerPercentiles(w: WorldState, p: Player) {
+  const peers = Object.values(w.players).filter((x) => !x.retired && !x.isYouth && x.role === p.role);
+  const rank = (f: (x: Player) => number) => {
+    const v = f(p);
+    return Math.round((peers.filter((x) => f(x) < v).length / Math.max(1, peers.length - 1)) * 100);
+  };
+  return {
+    role: p.role, count: peers.length,
+    overall: rank(overall), batting: rank((x) => battingRating(x.attrs)), bowling: rank((x) => bowlingRating(x.attrs, x.bowlType)),
+    fielding: rank((x) => fieldingRating(x.attrs)), power: rank((x) => x.attrs.bat.power), control: rank((x) => x.attrs.bowl.control),
+  };
+}
+
+/** Plain-language scouting summary; certainty depends on scouting level and data. */
+function scoutingReport(w: WorldState, p: Player, own: boolean) {
+  const scouting = w.clubs[w.userClubId].facilities.scouting;
+  const strengths: string[] = [];
+  const concerns: string[] = [];
+  const b = p.attrs.bat;
+  const bw = p.attrs.bowl;
+  if (b.power >= 80) strengths.push('Clears the rope with ease');
+  if (b.vsSpin - b.vsPace >= 6) strengths.push('Dominant against spin');
+  if (b.vsPace - b.vsSpin >= 6) strengths.push('Strong against pace');
+  if (b.death >= 80) strengths.push('Finishes innings');
+  if (b.powerplay >= 80) strengths.push('Attacks the new ball');
+  if (p.bowlType !== 'NONE' && bw.death >= 78) strengths.push('Trusted at the death');
+  if (p.bowlType !== 'NONE' && bw.control >= 82) strengths.push('Metronomic control');
+  if (p.bowlType !== 'NONE' && bw.variation >= 82) strengths.push('Hard to read');
+  if (p.attrs.field.athleticism >= 85) strengths.push('Outstanding athlete in the field');
+  if (b.vsSpin < 55 && p.role !== 'BOWL') concerns.push('Vulnerable to spin');
+  if (b.vsPace < 55 && p.role !== 'BOWL') concerns.push('Struggles against pace');
+  if (p.attrs.phys.durability < 55) concerns.push('Injury history risk');
+  if (ageOf(p, w.season) >= 34) concerns.push('Physical decline likely soon');
+  if (p.attrs.mental.temperament < 50) concerns.push('Can wilt under pressure');
+  const certainty = own ? 'high' : p.source === 'curated' && scouting >= 3 ? 'medium' : 'low';
+  return { strengths: strengths.slice(0, 4), concerns: concerns.slice(0, 3), certainty, note: own ? 'Assessed by your coaching staff.' : `Scouted at facility level ${scouting}/5; ratings shown as a range.` };
 }
 
 function coarseAttrs(p: Player) {
