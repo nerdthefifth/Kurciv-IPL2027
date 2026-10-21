@@ -6,3 +6,4 @@ export * from './auction-view';
 export * from './clubhouse';
 export * from './intel';
 export * from './match';
+export * from './idb-adapter';
