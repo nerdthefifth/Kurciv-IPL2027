@@ -1,4 +1,4 @@
-import type { AuctionLot, AuctionState, Club, LeagueConfig, Player, WorldState } from '@kurciv/domain';
+import type { AuctionLot, AuctionState, Club, LeagueConfig, LiveAuction, Player, WorldState } from '@kurciv/domain';
 import { ageOf, basePriceFor, bowlingKind, canAfford, canRegister, isOverseas, marketValue, overall } from '@kurciv/domain';
 import { EXPORT_RESTRICTIONS, LEAGUES, leagueById } from '@kurciv/config';
 import { hash01 } from '@kurciv/simulation';
@@ -38,7 +38,7 @@ export function eligibleForLeague(p: Player, l: LeagueConfig): boolean {
 
 const REPLACEMENT_LEVEL = 64;
 
-type Category = 'WK' | 'BAT' | 'AR' | 'PACE' | 'SPIN';
+export type Category = 'WK' | 'BAT' | 'AR' | 'PACE' | 'SPIN';
 
 export function categoryOf(p: Player): Category {
   if (p.role === 'WK') return 'WK';
@@ -47,7 +47,7 @@ export function categoryOf(p: Player): Category {
   return 'BAT';
 }
 
-function targets(l: LeagueConfig): Record<Category, number> {
+export function roleTargets(l: LeagueConfig): Record<Category, number> {
   const S = Math.min(l.squadRules.maxSquad, 23);
   return { WK: 2, BAT: Math.round(S * 0.26), AR: Math.round(S * 0.2), PACE: Math.round(S * 0.22), SPIN: Math.round(S * 0.13) };
 }
@@ -82,8 +82,8 @@ function buildLots(w: WorldState, a: AuctionState): AuctionLot[] {
   const vacancies = clubs.reduce((s, c) => s + Math.max(0, l.squadRules.maxSquad - c.squad.length), 0);
   const osVac = clubs.reduce((s, c) => s + Math.max(0, l.squadRules.maxOverseas - squadOf(w, c).filter((p) => isOverseas(p, l.domesticCountries)).length), 0);
   const byValue = (x: Player, y: Player) => marketValue(y, w.season) - marketValue(x, w.season) || x.id.localeCompare(y.id);
-  const domestic = pool.filter((p) => !isOverseas(p, l.domesticCountries)).sort(byValue).slice(0, Math.ceil((vacancies - osVac) * 1.7) + 10);
-  const overseas = pool.filter((p) => isOverseas(p, l.domesticCountries)).sort(byValue).slice(0, Math.ceil(osVac * 2.2) + 6);
+  const domestic = pool.filter((p) => !isOverseas(p, l.domesticCountries)).sort(byValue).slice(0, Math.ceil((vacancies - osVac) * 1.3) + 8);
+  const overseas = pool.filter((p) => isOverseas(p, l.domesticCountries)).sort(byValue).slice(0, Math.ceil(osVac * 1.7) + 6);
   const chosen = [...domestic, ...overseas];
   const scale = priceScale(l);
   const roundBase = (v: number) => {
@@ -151,7 +151,7 @@ export function valuePlayer(w: WorldState, a: AuctionState, club: Club, p: Playe
   if (!reg.ok) return { value: 0, maxBid: 0, reason: reg.reason ?? 'ineligible' };
   const scale = priceScale(l);
   const cat = categoryOf(p);
-  const tgt = targets(l);
+  const tgt = roleTargets(l);
   const have = squad.filter((x) => categoryOf(x) === cat).length;
   const need = have < tgt[cat] ? 1 + (0.45 * (tgt[cat] - have)) / tgt[cat] + (have === 0 && cat === 'WK' ? 0.4 : 0) : Math.pow(0.6, have - tgt[cat] + 1);
   const before = xiStrength(squad, l);
@@ -171,6 +171,9 @@ export function valuePlayer(w: WorldState, a: AuctionState, club: Club, p: Playe
     const osHave = squad.filter((x) => isOverseas(x, l.domesticCountries)).length;
     value *= 0.85 + Math.max(0, ovr - 72) / 60 - osHave * 0.03;
   }
+  // A club that just lost a contested player in this role chases a substitute a little harder.
+  const chasing = a.live?.missed[club.id]?.includes(cat) ? 1.12 : 1;
+  value *= chasing;
   const pers = personalityMult(club, p, w.season);
   value *= pers;
   value *= 0.93 + hash01(`${w.seed}|${club.id}|${p.id}`) * 0.14; // scouting disagreement
@@ -192,17 +195,18 @@ export function valuePlayer(w: WorldState, a: AuctionState, club: Club, p: Playe
   if (scarcity > 1) bits.push('few comparable players left');
   if (scarcity < 1) bits.push('similar options still to come');
   if (pers !== 1) bits.push(PERSONALITY_NOTES[club.personality]);
+  if (chasing > 1) bits.push('missed out on a target in this role earlier');
   if (maxBid < value * 0.9) bits.push(`capped by purse plan (${formatCr(spendable)} spendable over ${slotsLeft} slots)`);
   return { value: round2(value), maxBid, reason: bits.join('; ') };
 }
 
 // ------------------------------------------------------------------ bidding core
 
-function leader(lot: AuctionLot): string | null {
+export function leader(lot: AuctionLot): string | null {
   return lot.bids.length ? lot.bids[lot.bids.length - 1].clubId : null;
 }
 
-function validBidFor(w: WorldState, a: AuctionState, club: Club, p: Player, amount: number): string | null {
+export function validBidFor(w: WorldState, a: AuctionState, club: Club, p: Player, amount: number): string | null {
   const l = leagueById(a.leagueId);
   const squad = squadOf(w, club);
   const reg = canRegister(squad, p, l.squadRules, l.domesticCountries);
@@ -213,7 +217,7 @@ function validBidFor(w: WorldState, a: AuctionState, club: Club, p: Player, amou
 }
 
 /** AI clubs keep raising while anyone other than the leader values the lot above the next bid. */
-function escalate(w: WorldState, a: AuctionState, lot: AuctionLot, userMax: number | null) {
+export function escalate(w: WorldState, a: AuctionState, lot: AuctionLot, userMax: number | null) {
   const l = leagueById(a.leagueId);
   const p = w.players[lot.playerId];
   const ceilings: { clubId: string; max: number }[] = Object.entries(lot.aiMax ?? {}).map(([clubId, max]) => ({ clubId, max }));
@@ -230,7 +234,7 @@ function escalate(w: WorldState, a: AuctionState, lot: AuctionLot, userMax: numb
   }
 }
 
-function openLot(w: WorldState, a: AuctionState, idx: number) {
+export function openLot(w: WorldState, a: AuctionState, idx: number) {
   const lot = a.lots[idx];
   const l = leagueById(a.leagueId);
   const p = w.players[lot.playerId];
@@ -249,7 +253,7 @@ function openLot(w: WorldState, a: AuctionState, idx: number) {
   if (a.notes.length > 600) a.notes.splice(0, a.notes.length - 600);
 }
 
-function closeLot(w: WorldState, a: AuctionState, lot: AuctionLot) {
+export function closeLot(w: WorldState, a: AuctionState, lot: AuctionLot) {
   const l = leagueById(a.leagueId);
   const p = w.players[lot.playerId];
   const win = leader(lot);
@@ -298,7 +302,15 @@ export function startAuction(w: WorldState, auctionId: string) {
   a.status = 'live';
   a.currentLotIndex = 0;
   a.version++;
-  if (a.interactive) advanceToUserTurn(w, a);
+  // The user's auction opens in the lobby; the real-time room (auction-live.ts) drives it from there.
+  if (a.interactive) a.live = createLiveState();
+}
+
+export function createLiveState(): LiveAuction {
+  return {
+    phase: 'PREPARATION', phaseMs: 0, clock: 0, paused: false, schedule: {}, dropped: [], bidders: [], commentary: [],
+    lastResult: null, results: [], missed: {}, accelerated: null, userWatching: false, outbid: false,
+  };
 }
 
 function canUserBid(w: WorldState, a: AuctionState, lot: AuctionLot): boolean {
@@ -332,11 +344,28 @@ function advanceToUserTurn(w: WorldState, a: AuctionState) {
   }
 }
 
-function endRound(w: WorldState, a: AuctionState) {
+/**
+ * End of a round. In the live room (`selectAccelerated`) the user drafts which unsold players
+ * return; instant simulation brings back every unsold player automatically.
+ */
+export function endRound(w: WorldState, a: AuctionState, selectAccelerated = false) {
   const l = leagueById(a.leagueId);
   const round1Done = a.lots.every((x) => x.round === 2 || x.status !== 'pending');
   const hasRound2 = a.lots.some((x) => x.round === 2);
-  if (l.auctionRules.unsoldRound && round1Done && !hasRound2) {
+  if (l.auctionRules.unsoldRound && round1Done && !hasRound2 && a.live && selectAccelerated) {
+    // Interactive auction: the user (and AI clubs' nominations) choose who returns.
+    const candidates = a.lots.filter((x) => x.status === 'unsold').map((x) => x.playerId).filter((pid) => !w.players[pid].clubId);
+    if (candidates.length) {
+      const nominated = candidates.filter((pid) =>
+        clubsInLeague(w, l.id).some((c) => !c.isUser && valuePlayer(w, a, c, w.players[pid], a.lots.length).maxBid >= l.auctionRules.minBase * 1.2),
+      );
+      a.live.accelerated = { candidates, selected: nominated.slice(0, 40) };
+      a.live.phase = 'ACCELERATED_SELECTION';
+      a.live.phaseMs = 0;
+      return;
+    }
+  }
+  if (l.auctionRules.unsoldRound && round1Done && !hasRound2 && !selectAccelerated) {
     const unsold = a.lots.filter((x) => x.status === 'unsold').slice(0, 80);
     const fresh: AuctionLot[] = unsold.map((x) => ({ ...x, id: `${x.id}-r2`, status: 'pending', bids: [], soldTo: null, price: null, round: 2, userOut: false }));
     if (fresh.length) {
@@ -348,7 +377,19 @@ function endRound(w: WorldState, a: AuctionState) {
   finishAuction(w, a);
 }
 
+/** After instant simulation inside an interactive auction, the room resumes at the next lot. */
+export function resetLiveForNextLot(a: AuctionState) {
+  if (!a.live) return;
+  a.live.phase = a.status === 'live' ? 'PLAYER_INTRODUCTION' : 'COMPLETED';
+  a.live.phaseMs = 2600;
+  a.live.schedule = {};
+  a.live.dropped = [];
+  a.live.bidders = [];
+  a.live.outbid = false;
+}
+
 export function finishAuction(w: WorldState, a: AuctionState) {
+  if (a.live) a.live.phase = 'COMPLETED';
   const l = leagueById(a.leagueId);
   a.status = 'complete';
   a.version++;
@@ -371,7 +412,7 @@ export function fillSquadToMinimum(w: WorldState, c: Club, l: LeagueConfig): num
   let added = 0;
   while (c.squad.length < l.squadRules.minSquad) {
     const squad = squadOf(w, c);
-    const tgt = targets(l);
+    const tgt = roleTargets(l);
     const pool = Object.values(w.players)
       .filter((p) => eligibleForLeague(p, l) && ageOf(p, w.season) >= 16 && canRegister(squad, p, l.squadRules, l.domesticCountries).ok)
       .map((p) => {
@@ -494,7 +535,10 @@ function simulateUserLots(w: WorldState, a: AuctionState, until: 'flagged' | 'se
     closeLot(w, a, lot);
     a.currentLotIndex++;
   }
-  if (a.status === 'live') advanceToUserTurn(w, a);
+  if (a.status === 'live') {
+    if (a.live) resetLiveForNextLot(a);
+    else advanceToUserTurn(w, a);
+  }
 }
 
 /** Runs a non-interactive auction to completion. */

@@ -522,6 +522,62 @@ export interface AuctionState {
   notes: AiDecisionNote[];
   log: string[];
   interactive: boolean;
+  /** Real-time presentation state for the interactive auction room (see world/auction-live). */
+  live?: LiveAuction;
+}
+
+export type AuctionPhase =
+  | 'PREPARATION'
+  | 'PLAYER_INTRODUCTION'
+  | 'OPEN_FOR_BIDS'
+  | 'FINAL_CALL'
+  | 'SOLD'
+  | 'UNSOLD'
+  | 'ACCELERATED_SELECTION'
+  | 'COMPLETED';
+
+export interface AuctioneerLine {
+  t: number; // auction clock (ms)
+  text: string;
+  kind: 'intro' | 'bid' | 'drop' | 'call' | 'sold' | 'unsold' | 'info' | 'user';
+  clubId?: Id;
+}
+
+export interface LotResult {
+  lotId: Id;
+  playerId: Id;
+  status: 'sold' | 'unsold';
+  clubId: Id | null;
+  price: number | null;
+  estimate: number;
+  bids: number;
+  bidders: number;
+  headline: string;
+  reason: string | null;
+}
+
+export interface LiveAuction {
+  phase: AuctionPhase;
+  /** Milliseconds left in the current phase (countdowns only run while the room is open). */
+  phaseMs: number;
+  /** Total auction clock in ms; drives AI reaction scheduling. */
+  clock: number;
+  paused: boolean;
+  /** AI club id → clock time at which it will act on the current lot. */
+  schedule: Record<Id, number>;
+  /** Clubs that have dropped out of the current lot. */
+  dropped: Id[];
+  /** Clubs that bid on the current lot (for drama and summaries). */
+  bidders: Id[];
+  commentary: AuctioneerLine[];
+  lastResult: LotResult | null;
+  results: LotResult[];
+  /** Categories each club missed out on after bidding hard (drives substitute targeting). */
+  missed: Record<Id, string[]>;
+  /** Unsold players nominated for the accelerated round (user + AI picks). */
+  accelerated: { candidates: Id[]; selected: Id[] } | null;
+  userWatching: boolean;
+  outbid: boolean;
 }
 
 // ---------------------------------------------------------------- ledgers, news, history

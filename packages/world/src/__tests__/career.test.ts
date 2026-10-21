@@ -97,7 +97,7 @@ describe('career', () => {
   }, 300_000);
 
   it('rejects invalid custom clubs and duplicate identities', () => {
-    expect(() => createWorld({ careerId: 'c2', seed: 's', managerName: 'x', difficulty: 'rookie', customClub: { name: 'Mumbai Monarchs', shortName: 'MMX', city: 'Mumbai', leagueId: 'IPL', colors: ['#000', '#fff'] } })).toThrow(/already exists/);
+    expect(() => createWorld({ careerId: 'c2', seed: 's', managerName: 'x', difficulty: 'rookie', customClub: { name: 'Mumbai Indians', shortName: 'MMX', city: 'Mumbai', leagueId: 'IPL', colors: ['#000', '#fff'] } })).toThrow(/already exists/);
     expect(() => createWorld({ careerId: 'c2', seed: 's', managerName: 'x', difficulty: 'rookie', customClub: { name: 'Pune Pythons', shortName: 'MUM', city: 'Pune', leagueId: 'IPL', colors: ['#000', '#fff'] } })).toThrow(/already used/);
     const w = createWorld({ careerId: 'c3', seed: 's', managerName: 'x', difficulty: 'rookie', customClub: { name: 'Pune Pythons', shortName: 'PUP', city: 'Pune', leagueId: 'IPL', colors: ['#000', '#fff'] } });
     expect(w.clubs.PUP.isUser).toBe(true);

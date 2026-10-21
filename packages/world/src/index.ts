@@ -8,3 +8,4 @@ export * from './matchday';
 export * from './season';
 export * from './transfers';
 export * from './wcc';
+export * from './auction-live';
