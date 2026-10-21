@@ -80,6 +80,24 @@ describe('career', () => {
     expect(Object.entries(w.leagues).some(([k, v]) => v.reputation !== repBefore[k])).toBe(true);
     expect(w.history).toHaveLength(1);
 
+    // Storytelling is grounded in recorded events.
+    expect(w.chronicles).toHaveLength(1);
+    expect(w.chronicles[0].sections.length).toBeGreaterThan(3);
+    const kinds = new Set(w.timeline.map((t) => t.kind));
+    expect(kinds.has('season')).toBe(true);
+    expect(kinds.has('signing')).toBe(true);
+    for (const s of w.stories) {
+      for (const pid of s.playerIds) expect(w.players[pid], `story ${s.kicker} references ${pid}`).toBeTruthy();
+      if (s.kicker === 'A BLOW TO THE SQUAD') {
+        const p = w.players[s.playerIds[0]];
+        const real = p.injury?.id === s.trigger || p.injuryHistory.length > 0;
+        expect(real).toBe(true);
+      }
+    }
+    for (const t of w.timeline.filter((x) => x.kind === 'signing')) {
+      expect(w.ledger.some((l) => l.playerId === t.refs[0] && l.kind !== 'release')).toBe(true);
+    }
+
     // Retain the user's best three (validated), then roll into the next cascade.
     const user = w.clubs[w.userClubId];
     const keep = [...user.squad].sort((a, b) => w.players[b].reputation - w.players[a].reputation).slice(0, 3);

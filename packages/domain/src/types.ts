@@ -656,6 +656,60 @@ export interface RecordBook {
   mostCareerWickets: { wickets: number; playerId: Id } | null;
 }
 
+// ---------------------------------------------------------------- storytelling
+
+/** A real game operation a story can offer. UI-only kinds just navigate. */
+export type StoryActionKind =
+  | 'open-player'
+  | 'compare'
+  | 'open-page'
+  | 'promote-youth'
+  | 'swap-into-xi'
+  | 'rest-player'
+  | 'release-player'
+  | 'dismiss';
+
+export interface StoryAction {
+  label: string;
+  kind: StoryActionKind;
+  payload?: Record<string, string>;
+}
+
+export interface Story {
+  id: Id;
+  kicker: string; // editorial label, e.g. "THE NEXT GENERATION"
+  title: string;
+  body: string;
+  severity: 'minor' | 'notable' | 'major';
+  season: number;
+  day: number;
+  playerIds: Id[];
+  clubIds: Id[];
+  /** The concrete game event that produced this story (fixture id, injury id, ...). */
+  trigger: string;
+  actions: StoryAction[];
+  status: 'active' | 'resolved';
+  resolution?: string;
+}
+
+export interface TimelineEntry {
+  id: Id;
+  season: number;
+  day: number;
+  kind: 'season' | 'signing' | 'debut' | 'record' | 'milestone' | 'injury' | 'return' | 'achievement' | 'rivalry' | 'qualification' | 'title' | 'retirement' | 'auction' | 'board';
+  title: string;
+  detail: string;
+  refs: string[];
+}
+
+export interface SeasonChronicle {
+  season: number;
+  clubId: Id;
+  headline: string;
+  summary: string;
+  sections: { title: string; items: string[] }[];
+}
+
 export type SeasonPhase = 'retention' | 'auction' | 'preseason' | 'season' | 'wcc' | 'offseason';
 export type Difficulty = 'rookie' | 'professional' | 'elite' | 'legend';
 
@@ -704,4 +758,11 @@ export interface WorldState {
   /** Per-season tactical observations used by AI to counter the user. */
   scouting: { userBattingVsPace: number[]; userBattingVsSpin: number[] };
   pendingDecisions: string[];
+  stories: Story[];
+  timeline: TimelineEntry[];
+  chronicles: SeasonChronicle[];
+  /** Story triggers already used (keeps narratives from repeating). */
+  storyKeys: Record<string, number>;
+  /** Players each club has fielded this season (for debut detection). */
+  appearances: Record<string, string[]>;
 }

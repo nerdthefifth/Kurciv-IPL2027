@@ -13,6 +13,8 @@ import { applyMatch, buildMatchSetup, matchSeed } from './matchday';
 import { addNews, clamp, clubsInLeague, nextId, round2, squadOf, worldRng } from './util';
 import { aiInjuryCover } from './transfers';
 import { allocateForWorld, createWCC, progressWCC, updateReputations } from './wcc';
+import { roleDemand } from './auction-live';
+import { addTimeline, buildChronicle, storiesDaily, storyAuctionEve } from './story';
 
 export interface MatchRecord {
   fixtureId: string;
@@ -73,6 +75,7 @@ export function startSeason(w: WorldState): string[] {
   seasonStartFinances(w);
   w.phase = 'season';
   w.day = Math.min(...LEAGUES.map((l) => l.seasonStartDay)) - 1;
+  addTimeline(w, 'season', `The ${w.season} season begins`, w.clubs[w.userClubId].board.objectives.map((o) => o.description).join(' '));
   addNews(w, { kind: 'board', importance: 2, headline: `${w.season} season under way`, body: w.clubs[w.userClubId].board.objectives.map((o) => o.description).join(' '), clubIds: [w.userClubId], playerIds: [], sourceRef: `season-${w.season}` });
   return [];
 }
@@ -112,6 +115,7 @@ function processDay(w: WorldState, records: MatchRecord[], autoUser: boolean): F
 function endOfDay(w: WorldState) {
   for (const c of Object.values(w.clubs)) recoverDay(w, c);
   if (w.day % 3 === 0) aiInjuryCover(w);
+  storiesDaily(w);
   for (const l of LEAGUES) {
     const id = `${l.id}-${w.season}`;
     if (!w.competitions[id]) continue;
@@ -175,6 +179,7 @@ function onLeagueComplete(w: WorldState, compId: string) {
   const l = leagueById(comp.leagueId!);
   const champ = w.clubs[comp.championId!];
   champ.trophies.push({ season: w.season, competitionId: compId, name: l.name });
+  if (champ.isUser) addTimeline(w, 'title', `${l.name} champions`, `${champ.name} win the ${w.season} title.`, [compId]);
   champ.brand = Math.min(100, champ.brand + 3);
   champ.fanBase = Math.min(100, champ.fanBase + 3);
   w.leagues[l.id].champions.push({ season: w.season, clubId: champ.id, clubName: champ.name });
@@ -269,6 +274,7 @@ function sackAndReassign(w: WorldState) {
   w.userClubId = next.id;
   for (const f of Object.values(w.fixtures)) f.involvesUser = f.homeId === next.id || f.awayId === next.id;
   for (const a of Object.values(w.auctions)) a.interactive = a.leagueId === next.leagueId;
+  addTimeline(w, 'board', `Leaving ${old.name}`, `The board ended ${w.managerName}'s tenure; ${next.name} offered a new job.`, [old.id, next.id]);
   addNews(w, { kind: 'board', importance: 3, headline: `${old.name} part ways with ${w.managerName}`, body: `After repeated failures to meet objectives, the board has acted. ${next.name} (${leagueById(next.leagueId).shortName}) have offered ${w.managerName} a fresh start.`, clubIds: [old.id, next.id], playerIds: [], sourceRef: `sack-${w.season}` });
 }
 
@@ -286,6 +292,8 @@ export function endSeason(w: WorldState) {
 
   updateReputations(w);
   for (const c of Object.values(w.clubs)) evaluateBoard(w, c);
+  w.chronicles.push(buildChronicle(w));
+  addTimeline(w, 'season', `${w.season} season complete`, w.chronicles[w.chronicles.length - 1].summary);
 
   // History snapshot
   w.history.push({
@@ -305,7 +313,14 @@ export function endSeason(w: WorldState) {
     if (p.retired) continue;
     const club = p.clubId ? w.clubs[p.clubId] : p.isYouth ? Object.values(w.clubs).find((c) => c.academy.includes(p.id)) ?? null : null;
     developPlayer(w, p, club, matchesBy(p), rng);
-    p.injury = p.injury && p.injury.daysRemaining > 60 ? { ...p.injury, daysRemaining: p.injury.daysRemaining - 60 } : null;
+    if (p.injury) {
+      // The off-season heals most injuries; either way the injury stays on the record.
+      if (p.injury.daysRemaining > 60) p.injury = { ...p.injury, daysRemaining: p.injury.daysRemaining - 60 };
+      else {
+        p.injuryHistory.push({ season: w.season, type: p.injury.type, days: p.injury.expectedDaysMax });
+        p.injury = null;
+      }
+    }
     p.fatigue = 0;
     p.workload = 0;
     p.form = Math.round(p.form * 0.3 * 10) / 10;
@@ -314,6 +329,9 @@ export function endSeason(w: WorldState) {
     p.morale = Math.round(p.morale * 0.6 + 65 * 0.4);
     if (!p.isYouth && rng.chance(retirementChance(p, w.season + 1))) {
       p.retired = true;
+      if (p.clubId === w.userClubId && p.stats.career.matches >= 25) {
+        addTimeline(w, 'retirement', `${p.name} retires`, `A club servant: ${p.stats.career.matches} matches, ${p.stats.career.runs} runs, ${p.stats.career.wickets} wickets.`, [p.id]);
+      }
       if (p.clubId) {
         w.clubs[p.clubId].squad = w.clubs[p.clubId].squad.filter((x) => x !== p.id);
         w.ledger.push({ id: nextId(w, 'tx'), season: w.season, day: w.day, playerId: p.id, fromClubId: p.clubId, toClubId: null, kind: 'retirement', fee: 0, note: `Retired aged ${ageOf(p, w.season)}` });
@@ -347,6 +365,7 @@ export function endSeason(w: WorldState) {
   // Next season
   w.season += 1;
   w.day = 20;
+  w.appearances = {};
   w.phase = 'retention';
   for (const c of Object.values(w.clubs)) {
     c.retentionsLocked = false;
@@ -490,6 +509,8 @@ export function commitRetentions(w: WorldState) {
   w.phase = 'auction';
   setupAuctions(w);
   advanceCascade(w);
+  const ua = Object.values(w.auctions).find((a) => a.interactive);
+  if (ua && ua.status === 'live') storyAuctionEve(w, roleDemand(w, ua));
 }
 
 export function promoteYouth(w: WorldState, c: Club, id: string): string | null {

@@ -5,6 +5,7 @@ import { hash01 } from '@kurciv/simulation';
 import { pickXI } from '@kurciv/ai';
 import { addNews, clubsInLeague, formatCr, nextId, round2, squadOf } from './util';
 import { recordTransaction } from './finance';
+import { addTimeline } from './story';
 
 /**
  * Global auction cascade. Leagues auction in descending reputation; a player bought by a
@@ -291,6 +292,9 @@ export function signPlayer(w: WorldState, club: Club, p: Player, price: number, 
   w.freeAgents = w.freeAgents.filter((id) => id !== p.id);
   w.ledger.push({ id: nextId(w, 'tx'), season: w.season, day: w.day, playerId: p.id, fromClubId: null, toClubId: club.id, kind, fee: price, note: `${l.shortName} ${kind}` });
   if (price > 0) recordTransaction(w, club.id, 'auction', -price, `${p.name} (${kind})`);
+  if (club.isUser && (kind === 'auction' || kind === 'free-agent' || kind === 'replacement')) {
+    addTimeline(w, 'signing', `${p.name} signs for ${club.name}`, `${kind === 'auction' ? 'Bought at auction' : 'Signed'} for ${formatCr(price)}.`, [p.id]);
+  }
 }
 
 // ------------------------------------------------------------------ lifecycle

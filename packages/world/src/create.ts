@@ -5,6 +5,8 @@ import { CURATED_PLAYERS, expandCurated, generatePlayer } from '@kurciv/data-ing
 import { Rng } from '@kurciv/simulation';
 import { defaultTactics } from '@kurciv/ai';
 import { advanceCascade, setupAuctions } from './auction';
+import { roleDemand } from './auction-live';
+import { addTimeline, storyAuctionEve } from './story';
 import { addNews } from './util';
 
 /** Typical depth of domestic T20 talent by country (mean overall of a generated pro). */
@@ -87,6 +89,7 @@ export function createWorld(input: CreateCareerInput): WorldState {
     records: { highestTeamTotal: null, lowestTeamTotal: null, highestScore: null, bestBowling: null, mostCareerRuns: null, mostCareerWickets: null },
     rivalries: {}, freeAgents: [], counter: 0, settings: { autoPlayUserMatches: false, reducedMotion: false },
     scouting: { userBattingVsPace: [], userBattingVsSpin: [] }, pendingDecisions: [],
+    stories: [], timeline: [], chronicles: [], storyKeys: {}, appearances: {},
   };
 
   for (const l of LEAGUES) {
@@ -146,6 +149,10 @@ export function createWorld(input: CreateCareerInput): WorldState {
   setupAuctions(w);
   // Higher-tier auctions run instantly; the user's own league auction opens live.
   if (advanceCascade(w)) w.phase = 'preseason';
+  const userClubRef = w.clubs[w.userClubId];
+  addTimeline(w, 'season', `${w.managerName} takes charge of ${userClubRef.name}`, `The ${season} season begins with the ${leagueById(userClubRef.leagueId).name} auction.`);
+  const ua = Object.values(w.auctions).find((a) => a.interactive);
+  if (ua && ua.status === 'live') storyAuctionEve(w, roleDemand(w, ua));
   addNews(w, {
     kind: 'auction',
     headline: `${season} season opens with a global auction cascade`,

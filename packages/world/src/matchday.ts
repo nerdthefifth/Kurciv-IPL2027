@@ -7,6 +7,7 @@ import { applyToStandings } from './competition';
 import { applyMatchLoad, rollInjury, updateForm, updateMorale } from './condition';
 import { matchdayIncome } from './finance';
 import { addNews, clamp, squadOf, worldRng } from './util';
+import { addTimeline, storiesAfterUserMatch } from './story';
 
 const DIFFICULTY_QUALITY = { rookie: 0.35, professional: 0.55, elite: 0.72, legend: 0.88 } as const;
 
@@ -274,6 +275,7 @@ export function applyMatch(w: WorldState, fx: Fixture, s: MatchState) {
   updateRivalry(w, fx, winnerId);
   updateRecords(w, fx, summary);
   if (fx.involvesUser) trackUserTendencies(w, fx, s);
+  if (fx.involvesUser) storiesAfterUserMatch(w, fx, s);
   if (fx.involvesUser) {
     const u = w.clubs[w.userClubId];
     const opp = w.clubs[fx.homeId === u.id ? fx.awayId : fx.homeId];
@@ -313,6 +315,7 @@ function updateRecords(w: WorldState, fx: Fixture, r: MatchResultSummary) {
       if (rec.highestTeamTotal && inn.runs > rec.highestTeamTotal.runs) {
         addNews(w, { kind: 'milestone', importance: 3, headline: `Record total: ${w.clubs[inn.battingClubId].name} make ${inn.runs}`, body: `The highest total in Kurciv history, beating ${rec.highestTeamTotal.runs}.`, clubIds: [inn.battingClubId], playerIds: [], sourceRef: fx.id });
         w.hallOfFame.push({ id: `hof-${fx.id}-tot`, season: w.season, kind: 'record', title: `Highest team total: ${inn.runs}`, detail: `${w.clubs[inn.battingClubId].name}, ${fx.stage}`, refs: [fx.id] });
+        addTimeline(w, 'record', `World record total: ${inn.runs}`, `${w.clubs[inn.battingClubId].name}, ${fx.stage}.`, [fx.id]);
       }
       rec.highestTeamTotal = { runs: inn.runs, clubId: inn.battingClubId, fixtureId: fx.id, season: w.season };
     }

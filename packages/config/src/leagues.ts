@@ -195,7 +195,7 @@ export const CLUB_SEEDS: Record<string, ClubSeed[]> = {
   ],
   CAR: [
     c('TRI', 'Trinbago Knight Riders', 'TKR', 'Port of Spain', 'qpo', ['#E31B23', '#1B1B1B'], 'star-commercial', 60),
-    c('JAM', 'Jamaica Tallawahs', 'JT', 'Kingston', 'sabina', ['#009B3A', '#FED100'], 'aggressive-contender', 52),
+    c('JAM', 'Jamaica Kingsmen', 'JK', 'Kingston', 'sabina', ['#009B3A', '#FED100'], 'aggressive-contender', 52),
     c('BAR', 'Barbados Royals', 'BR', 'Bridgetown', 'kensington', ['#EA1A85', '#254AA5'], 'pace-first', 54),
     c('GUY', 'Guyana Amazon Warriors', 'GAW', 'Providence', 'providence', ['#009E49', '#F58220'], 'spin-tactician', 54),
     c('STL', 'Saint Lucia Kings', 'SLK', 'Gros Islet', 'sammy', ['#DD1F2D', '#A7A9AC'], 'youth-builder', 46),
@@ -251,3 +251,20 @@ export const COUNTRY_NAMES: Record<CountryCode, string> = {
  * leagues (e.g. Indian players do not play in overseas franchise leagues). Configurable.
  */
 export const EXPORT_RESTRICTIONS: Partial<Record<CountryCode, string[]>> = { IND: ['IPL'] };
+
+/**
+ * Lookup hints for the optional runtime image provider (TheSportsDB). League names as that
+ * service lists them, and aliases where its team name differs from ours. Only exact matches are
+ * used, so a renamed franchise falls back to its original Kurciv crest rather than a wrong logo.
+ */
+export const IMAGE_LOOKUP = {
+  leagues: {
+    IPL: 'Indian Premier League', SXT: 'Australian Big Bash League', ALB: 'English T20 Blast', PRT: 'SA20', IND2: 'Pakistan Super League',
+    DES: 'International League T20', CAR: 'Caribbean Premier League', LIB: 'Major League Cricket', AOT: 'New Zealand Super Smash',
+    LNK: 'Lanka Premier League', BAY: 'Bangladesh Premier League',
+  } as Record<string, string>,
+  clubAliases: {
+    BEN: ['Royal Challengers Bangalore'], ANT: ['Antigua and Barbuda Falcons'], SOU: ['Hampshire t20', 'Hampshire Hawks'],
+    CDF: ['Glamorgan t20'], LDR: ['Middlesex t20'], LDF: ['Surrey t20'], LEE: ['Yorkshire t20'], NOT: ['Nottinghamshire t20'],
+  } as Record<string, string[]>,
+};

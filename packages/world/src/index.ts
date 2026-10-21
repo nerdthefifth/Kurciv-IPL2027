@@ -9,3 +9,4 @@ export * from './season';
 export * from './transfers';
 export * from './wcc';
 export * from './auction-live';
+export * from './story';

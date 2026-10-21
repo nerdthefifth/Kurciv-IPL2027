@@ -5,6 +5,7 @@ import { overall } from '@kurciv/domain';
 import { emptyRow, finishingOrder, sortRows } from './competition';
 import { recordTransaction } from './finance';
 import { addNews, clamp, clubsInLeague, squadOf } from './util';
+import { addTimeline } from './story';
 
 // ------------------------------------------------------------------ allocation (pure)
 
@@ -157,6 +158,7 @@ export function createWCC(w: WorldState, startDay: number): Competition {
   } else createGroups(w, comp, (comp.meta!.direct as string[]), startDay);
   for (const q of qualifiers) {
     if (w.clubs[q.clubId].isUser) {
+      addTimeline(w, 'qualification', 'Qualified for the World Club Championship', plan.description, [id]);
       addNews(w, { kind: 'qualification', importance: 3, headline: `${w.clubs[q.clubId].name} qualify for the World Club Championship`, body: plan.description, clubIds: [q.clubId], playerIds: [], sourceRef: id });
     }
   }
