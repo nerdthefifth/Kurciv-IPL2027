@@ -1,0 +1,23 @@
+{
+  "name": "@kurciv/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@kurciv/ai": "*",
+    "@kurciv/config": "*",
+    "@kurciv/data-ingestion": "*",
+    "@kurciv/domain": "*",
+    "@kurciv/simulation": "*",
+    "@kurciv/world": "*",
+    "express": "4.21.2",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "4.17.21"
+  }
+}

@@ -4,7 +4,7 @@ import { CLUB_SEEDS, LEAGUES, VENUES, WORLD, leagueById } from '@kurciv/config';
 import { CURATED_PLAYERS, expandCurated, generatePlayer } from '@kurciv/data-ingestion';
 import { Rng } from '@kurciv/simulation';
 import { defaultTactics } from '@kurciv/ai';
-import { setupAuctions } from './auction';
+import { advanceCascade, setupAuctions } from './auction';
 import { addNews } from './util';
 
 /** Typical depth of domestic T20 talent by country (mean overall of a generated pro). */
@@ -143,6 +143,8 @@ export function createWorld(input: CreateCareerInput): WorldState {
   for (const c of ['AFG', 'ZIM', 'NED', 'NEP', 'IRE', 'SCO', 'NAM'] as CountryCode[]) generateFor(c, 10);
 
   setupAuctions(w);
+  // Higher-tier auctions run instantly; the user's own league auction opens live.
+  if (advanceCascade(w)) w.phase = 'preseason';
   addNews(w, {
     kind: 'auction',
     headline: `${season} season opens with a global auction cascade`,
