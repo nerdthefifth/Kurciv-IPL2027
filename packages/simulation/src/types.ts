@@ -46,6 +46,8 @@ export interface MatchRules {
   maxBowlerOvers: number;
   reviews: number;
   superOver: boolean;
+  /** When a review comes back "umpire's call", the reviewing side keeps the review (ICC playing conditions). */
+  umpiresCallRetainsReview?: boolean;
 }
 
 export const T20_RULES: MatchRules = {
@@ -145,7 +147,15 @@ export interface DeliveryEvent {
   runsSaved: number;
   freeHit: boolean;
   illegalField: boolean;
-  review: { by: 'batting' | 'bowling'; overturned: boolean } | null;
+  review: { by: 'batting' | 'bowling'; overturned: boolean; kind?: 'lbw' | 'caught-behind'; umpiresCall?: boolean; retained?: boolean; decisive?: string } | null;
+  /** Ball tracking for LBW appeals (simulated, generated when the ball was bowled). */
+  tracking?: LbwTracking | null;
+  /** Simulated edge-detection evidence for caught-behind appeals. */
+  edge?: EdgeEvidence | null;
+  /** The tactical set-up in force for this ball. */
+  setup?: { intent: number; approach: string; field: string; plan: string; running: RunningStyle };
+  /** Why the ball turned out as it did, from the factors the engine actually used. */
+  why?: string[];
   /** Situational pressure on each player for this ball (0 calm .. 1 extreme) and why. */
   pressure: { batter: number; bowler: number; reasons: string[] };
   umpireNote: string | null;
@@ -153,6 +163,47 @@ export interface DeliveryEvent {
   winProbHome: number;
   commentary: string;
 }
+
+/**
+ * LBW ball tracking. Lateral positions (x) are metres from middle stump, positive towards the
+ * batter's off side; heights (z) in metres; distances (d) in metres in front of the stumps.
+ */
+export interface LbwTracking {
+  pitch: { x: number; d: number } | null; // null: full toss
+  impact: { x: number; z: number; d: number };
+  projected: { x: number; z: number };
+  pitched: 'in-line' | 'outside-off' | 'outside-leg' | 'full-toss';
+  impactZone: 'in-line' | 'outside-off' | 'outside-leg' | 'umpires-call';
+  wickets: 'hitting' | 'umpires-call' | 'missing';
+  missBy: string | null;
+  shotOffered: boolean;
+}
+
+export interface EdgeEvidence {
+  /** Whether the ball actually touched the bat (engine truth). */
+  contact: boolean;
+  thickness: 'none' | 'faint' | 'thin' | 'thick';
+  /** Closest distance between ball and bat, centimetres (0 when it touched). */
+  gapCm: number;
+  /** Simulated edge-detection trace as the ball passed the bat. */
+  spike: 'none' | 'flat' | 'small' | 'clear';
+  /** Something other than the ball made a sound at the same time (bat on pad or ground). */
+  otherNoise: boolean;
+}
+
+export type RunningStyle = 'conservative' | 'balanced' | 'aggressive';
+
+/** Per-decision automation for a side the user controls. true = AI decides. */
+export interface AutoSettings {
+  bowler: boolean;
+  batter: boolean;
+  field: boolean;
+  approach: boolean;
+  plan: boolean;
+  reviews: boolean;
+}
+
+export const DEFAULT_AUTO: AutoSettings = { bowler: false, batter: true, field: false, approach: false, plan: false, reviews: false };
 
 export interface OverSummary {
   innings: number;
@@ -201,6 +252,10 @@ export interface InningsState {
   plan: BowlingPlan;
   intent: number | null; // team-level manual override
   batterIntent: Record<string, number>;
+  /** Per-batter adjustments against pace and spin, added to their intent (−0.3..0.3). */
+  batterPlans?: Record<string, { vsPace?: number; vsSpin?: number }>;
+  /** Bowling plans aimed at specific batters (override the general plan when that batter is on strike). */
+  planByBatter?: Record<string, BowlingPlan>;
   reviewsLeft: { batting: number; bowling: number };
   freeHit: boolean;
   fow: { wicket: number; runs: number; balls: number; playerId: string }[];
@@ -213,15 +268,24 @@ export interface InningsState {
 }
 
 export type Pending =
+  | { kind: 'toss-call'; side: Side }
   | { kind: 'toss'; side: Side }
+  | { kind: 'batter'; side: Side; incomingId: string; eligible: string[] }
   | { kind: 'bowler'; side: Side; suggestion: string; eligible: string[] }
-  | { kind: 'review'; side: Side; by: 'batting' | 'bowling'; reason: string };
+  | { kind: 'review'; side: Side; by: 'batting' | 'bowling'; reason: string; decision?: 'lbw' | 'caught-behind' };
 
 export type MatchAction =
+  | { type: 'toss-call'; call: 'heads' | 'tails' }
   | { type: 'toss'; decision: 'bat' | 'bowl' }
+  | { type: 'batter'; playerId: string }
+  | { type: 'auto'; settings: Partial<AutoSettings> }
+  | { type: 'running'; value: RunningStyle }
+  | { type: 'bowler-field'; bowlerId: string; templateId: string | null }
+  | { type: 'save-field'; name: string }
+  | { type: 'batter-plan'; batterId: string; vsPace: number | null; vsSpin: number | null }
   | { type: 'bowler'; playerId: string }
   | { type: 'field'; positions: FieldPoint[]; keeperUp: boolean; templateId?: string | null; name?: string }
-  | { type: 'plan'; plan: BowlingPlan }
+  | { type: 'plan'; plan: BowlingPlan; batterId?: string | null }
   | { type: 'intent'; value: number | null; batterId?: string }
   | { type: 'order'; order: string[] }
   | { type: 'review'; review: boolean }
@@ -238,12 +302,20 @@ export interface MatchState {
   seed: string;
   rng: RngState;
   setup: MatchSetup;
-  toss: { winner: Side; decision: 'bat' | 'bowl' | null };
+  /** coin === null: the call has not been made yet (winner is a placeholder until then). */
+  toss: { winner: Side; decision: 'bat' | 'bowl' | null; caller?: Side; call?: 'heads' | 'tails' | null; coin?: 'heads' | 'tails' | null };
   innings: InningsState[];
   status: 'toss' | 'live' | 'complete';
   pending: Pending | null;
   pendingEvent: DeliveryEvent | null;
-  pendingMeta: { trueOut: boolean; umpireOut: boolean; perceived: number } | null;
+  pendingMeta: { trueOut: boolean; umpireOut: boolean; perceived: number; kind?: 'lbw' | 'caught-behind'; keeperId?: string | null } | null;
+  /** Per-side automation and running style for sides the user controls. */
+  auto?: Partial<Record<Side, AutoSettings>>;
+  running?: Partial<Record<Side, RunningStyle>>;
+  /** Field preset (template id) to use whenever a given bowler starts an over, per side. */
+  fieldByBowler?: Partial<Record<Side, Record<string, string>>>;
+  /** Controllers in force at the last step (used when a decision resolves outside a step). */
+  lastCtl?: Controllers;
   seq: number;
   deliveries: DeliveryEvent[];
   actions: LoggedAction[];

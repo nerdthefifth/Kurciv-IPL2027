@@ -7,3 +7,4 @@ export * from './winprob';
 export { commentaryFor } from './commentary';
 export * from './pressure';
 export * from './award';
+export * from './review';

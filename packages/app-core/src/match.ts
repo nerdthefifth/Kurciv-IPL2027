@@ -2,7 +2,7 @@ import { AiCaptain } from '@kurciv/ai';
 import { applyAction, createMatch, currentInnings, step, type Controllers, type DeliveryEvent, type MatchState, type Pending } from '@kurciv/simulation';
 import type { LiveMatch } from './persistence';
 
-export type StepMode = 'ball' | 'over' | 'key' | 'innings' | 'end';
+export type StepMode = 'ball' | 'over' | 'next-over' | 'key' | 'innings' | 'end';
 
 export function controllersFor(state: MatchState, live: LiveMatch): Controllers {
   let ctl: Controllers = { home: 'ai', away: 'ai' };
@@ -23,6 +23,9 @@ export function runSteps(live: LiveMatch, mode: StepMode): { events: DeliveryEve
   }
   const events: DeliveryEvent[] = [];
   const startInnings = s.innings.length;
+  // 'next-over' finishes the current over (if one is in progress) and then plays one more.
+  const cur = currentInnings(s);
+  let oversToFinish = mode === 'next-over' && cur && cur.legalBalls % 6 !== 0 && !cur.complete ? 2 : 1;
   let guard = 0;
   while (s.status !== 'complete' && guard++ < 1500) {
     const r = step(s, controllersFor(s, live), AiCaptain);
@@ -34,7 +37,10 @@ export function runSteps(live: LiveMatch, mode: StepMode): { events: DeliveryEve
     if (mode === 'ball') break;
     if (s.innings.length !== startInnings && mode !== 'end') break;
     const overDone = ev.legal && inn.legalBalls % 6 === 0 && inn.index === ev.innings;
-    if (mode === 'over' && (overDone || inn.index !== ev.innings)) break;
+    if ((mode === 'over' || mode === 'next-over') && (overDone || inn.index !== ev.innings)) {
+      if (mode === 'next-over' && overDone && --oversToFinish > 0 && inn.index === ev.innings) continue;
+      break;
+    }
     if (mode === 'key') {
       if (ev.wicket || ev.boundary === 6 || ev.chance || inn.index !== ev.innings) break;
       if (overDone && Math.floor(inn.legalBalls / 6) >= s.setup.rules.overs - 4) break;

@@ -47,7 +47,9 @@ describe('match engine', () => {
       const r = step(s, ctl, AiCaptain);
       if (r.needs) {
         const n = r.needs;
-        if (n.kind === 'toss') applyAction(s, 'home', { type: 'toss', decision: 'bowl' });
+        if (n.kind === 'toss-call') applyAction(s, 'home', { type: 'toss-call', call: 'heads' });
+        else if (n.kind === 'toss') applyAction(s, 'home', { type: 'toss', decision: 'bowl' });
+        else if (n.kind === 'batter') applyAction(s, 'home', { type: 'batter', playerId: n.incomingId });
         else if (n.kind === 'bowler') applyAction(s, 'home', { type: 'bowler', playerId: n.suggestion });
         else applyAction(s, 'home', { type: 'review', review: true });
       }
@@ -72,6 +74,10 @@ describe('match engine', () => {
       const s = createMatch(setup(`illegal-${k}`, 'away'), `illegal-${k}`);
       const ctl = { home: 'ai' as const, away: 'manual' as const };
       let r = step(s, ctl, AiCaptain);
+      if (r.needs?.kind === 'toss-call') {
+        applyAction(s, 'away', { type: 'toss-call', call: 'heads' });
+        r = step(s, ctl, AiCaptain);
+      }
       if (r.needs?.kind === 'toss') {
         applyAction(s, 'away', { type: 'toss', decision: 'bowl' });
         r = step(s, ctl, AiCaptain);

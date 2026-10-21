@@ -7,7 +7,8 @@ import { VENUES, leagueById } from '@kurciv/config';
 import { overall, bowlingRating, type Player } from '@kurciv/domain';
 (globalThis as any).__br = (p: Player) => bowlingRating(p.attrs, p.bowlType);
 import { buildTeamSetup, defaultTactics, pickXI, simulateMatch } from '@kurciv/ai';
-import { T20_RULES, Rng, type MatchState } from '@kurciv/simulation';
+import { T20_RULES, Rng, lbwTrueOut, type MatchState } from '@kurciv/simulation';
+const ump = { lbwAppeals: 0, lbwCorrect: 0, lbwMissed: 0, lbwFalseOut: 0, cbAppeals: 0, cbMissedEdge: 0, cbFalseOut: 0, reviews: 0, overturned: 0, umpiresCall: 0 };
 
 const N = Number(process.argv[2] ?? 1000);
 const season = 2027;
@@ -74,6 +75,19 @@ for (let m = 0; m < N; m++) {
     else if (d.batRuns === 2) agg.twos++;
     else if (d.batRuns === 3) agg.threes++;
     if (d.wicket) agg.kinds[d.wicket.kind] = (agg.kinds[d.wicket.kind] ?? 0) + 1;
+    if (d.tracking) {
+      const t = lbwTrueOut(d.tracking);
+      const given = d.review?.overturned ? !d.wicket : !!d.wicket;
+      ump.lbwAppeals++;
+      if (t === given) ump.lbwCorrect++; else if (t) ump.lbwMissed++; else ump.lbwFalseOut++;
+    }
+    if (d.edge) {
+      ump.cbAppeals++;
+      const given = d.review?.overturned ? !d.wicket : !!d.wicket;
+      if (d.edge.contact && !given) ump.cbMissedEdge++;
+      if (!d.edge.contact && given) ump.cbFalseOut++;
+    }
+    if (d.review) { ump.reviews++; if (d.review.overturned) ump.overturned++; if (d.review.umpiresCall) ump.umpiresCall++; }
   }
   if (s.result?.winner) {
     agg.decided++;
@@ -98,6 +112,8 @@ console.log(`Powerplay (0-6): ${mean(agg.pp).toFixed(1)}   Death (16-20): ${mean
 console.log(`Ball outcomes: dots ${pct(agg.dots)}  1s ${pct(agg.ones)}  2s ${pct(agg.twos)}  3s ${pct(agg.threes)}  4s ${pct(agg.fours)}  6s ${pct(agg.sixes)}`);
 console.log(`Extras per innings: wides ${(agg.wides / (2 * N)).toFixed(2)}  no-balls ${(agg.nb / (2 * N)).toFixed(2)}  byes ${(agg.byes / (2 * N)).toFixed(2)}  leg-byes ${(agg.lb / (2 * N)).toFixed(2)}`);
 console.log(`Dismissals: ${Object.entries(agg.kinds).map(([k, v]) => `${k} ${((v / totalW) * 100).toFixed(0)}%`).join('  ')}`);
+console.log(`Umpiring per match: LBW appeals ${(ump.lbwAppeals / N).toFixed(2)} (on-field correct ${((ump.lbwCorrect / Math.max(1, ump.lbwAppeals)) * 100).toFixed(0)}%, missed outs ${ump.lbwMissed}, false outs ${ump.lbwFalseOut})  caught-behind appeals ${(ump.cbAppeals / N).toFixed(2)} (missed edges ${ump.cbMissedEdge}, false outs ${ump.cbFalseOut})`);
+console.log(`Reviews per match ${(ump.reviews / N).toFixed(2)}: overturned ${ump.overturned}, umpire's call ${ump.umpiresCall}`);
 console.log(`Catches taken ${agg.catches}, dropped ${agg.drops} (${((agg.catches / (agg.catches + agg.drops)) * 100).toFixed(0)}% conversion)`);
 console.log(`Chasing side won ${((agg.chaseWins / agg.decided) * 100).toFixed(1)}%   super overs ${agg.superOvers}`);
 console.log(`Stronger XI win % by XI-rating gap: ${Object.entries(agg.gapWins).map(([k, [w, n]]) => `${k}: ${((w / n) * 100).toFixed(0)}% (${n})`).join('  ')}`);

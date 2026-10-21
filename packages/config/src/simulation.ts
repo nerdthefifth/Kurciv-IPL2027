@@ -5,7 +5,7 @@
  * first innings, ~6.5 wickets, ~36% dot balls, ~1 boundary every 6 balls.
  */
 export const SIM = {
-  engineVersion: 'kurciv-t20-1.0.0',
+  engineVersion: 'kurciv-t20-1.1.0',
 
   // --- geometry (metres)
   strikerY: -8.8,
@@ -88,6 +88,8 @@ export const SIM = {
   stumpingChance: 0.3,
   umpireMissRate: 0.12,
   umpireFalseOutRate: 0.025,
+  /** Chance a beaten ball outside off, taken by the keeper, is wrongly given caught behind. */
+  umpireFalseCaughtBehindRate: 0.006,
   catchBase: 0.5,
   catchPerSkill: 0.0045,
   catchSlackBonus: 0.12,

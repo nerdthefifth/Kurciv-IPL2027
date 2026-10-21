@@ -37,8 +37,16 @@ export interface FieldEditorProps {
   lastBall?: { end: FieldPoint | null; boundary: 4 | 6 | null; wicket: boolean; aerial: boolean } | null;
   wagon?: { end: FieldPoint; runs: number }[];
   className?: string;
+  /** Classes for the SVG itself (e.g. to fill a fixed-height panel). */
+  svgClassName?: string;
   showValidation?: boolean;
   label?: string;
+  /** Competition field restrictions (defaults: 2 outside the circle in the powerplay, 5 otherwise). */
+  rules?: { maxOutsidePP: number; maxOutside: number };
+  /** Optional player label per position (e.g. surname) and selection. */
+  names?: (string | undefined)[];
+  selected?: number | null;
+  onSelect?: (i: number | null) => void;
 }
 
 /**
@@ -47,7 +55,7 @@ export interface FieldEditorProps {
  */
 export function FieldEditor({
   positions, onChange, venue = DEFAULT_VENUE, powerplay = false, hand = 'R', mirrorForLeft = true, keeperUp = false, zoneRuns, lastBall, wagon,
-  className = '', showValidation = true, label = 'Field placement',
+  className = '', svgClassName = 'h-auto w-full', showValidation = true, label = 'Field placement', rules = { maxOutsidePP: 2, maxOutside: 5 }, names, selected = null, onSelect,
 }: FieldEditorProps) {
   const svg = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<number | null>(null);
@@ -56,7 +64,8 @@ export function FieldEditor({
   const { a, b } = boundaryAxes(venue);
   const showMirrored = hand === 'L' && mirrorForLeft;
   const display = showMirrored ? positions.map(mirror) : positions;
-  const validation = useMemo(() => validateField(display, hand, { powerplay, maxOutsidePP: 2, maxOutside: 5, venue }), [display, hand, powerplay, venue]);
+  const validation = useMemo(() => validateField(display, hand, { powerplay, maxOutsidePP: rules.maxOutsidePP, maxOutside: rules.maxOutside, venue }), [display, hand, powerplay, venue, rules.maxOutsidePP, rules.maxOutside]);
+  const maxOut = powerplay ? rules.maxOutsidePP : rules.maxOutside;
 
   const toWorld = (clientX: number, clientY: number): FieldPoint | null => {
     const el = svg.current;
@@ -117,7 +126,7 @@ export function FieldEditor({
       <svg
         ref={svg}
         viewBox={`${-vbW} ${-vbH} ${vbW * 2} ${vbH * 2}`}
-        className="h-auto w-full touch-none select-none"
+        className={`${svgClassName} touch-none select-none`}
         role="group"
         aria-label={`${label}. ${hand === 'L' ? 'Left-handed' : 'Right-handed'} batter view; off side is on the ${hand === 'L' ? 'left' : 'right'}.`}
         onPointerMove={onPointerMove}
@@ -196,6 +205,7 @@ export function FieldEditor({
               onFocus={() => setFocus(i)}
               onBlur={() => setFocus(null)}
               onPointerDown={(e) => {
+                onSelect?.(i);
                 if (!editable) return;
                 (e.target as Element).setPointerCapture?.(e.pointerId);
                 setDrag(i);
@@ -203,11 +213,14 @@ export function FieldEditor({
               style={{ cursor: editable ? (drag === i ? 'grabbing' : 'grab') : 'default', outline: 'none' }}
             >
               <circle cx={p.x} cy={-p.y} r={editable ? 3.6 : 2.6} fill="transparent" />
-              <circle cx={p.x} cy={-p.y} r="2.2" fill={out ? '#c6ff1a' : '#f4f6f8'} stroke={isFocus || drag === i ? '#ffb020' : '#07080a'} strokeWidth={isFocus || drag === i ? 0.8 : 0.4} />
-              <text x={p.x} y={-p.y + 0.9} textAnchor="middle" fontSize="2.2" fontWeight="700" fill="#07080a" pointerEvents="none">
+              <circle cx={p.x} cy={-p.y} r="2.2" fill={out ? '#C5F36B' : '#F1F0E8'} stroke={isFocus || drag === i || selected === i ? '#D9AE69' : '#101210'} strokeWidth={isFocus || drag === i || selected === i ? 0.8 : 0.4} />
+              <text x={p.x} y={-p.y + 0.9} textAnchor="middle" fontSize="2.2" fontWeight="700" fill="#101210" pointerEvents="none">
                 {ABBR[name] ?? i + 1}
               </text>
-              <title>{name}</title>
+              {names?.[i] && (
+                <text x={p.x} y={-p.y + 5.2} textAnchor="middle" fontSize="2.3" fill="#F1F0E8" opacity="0.85" pointerEvents="none">{names[i]}</text>
+              )}
+              <title>{names?.[i] ? `${names[i]} — ${name}` : name}</title>
             </g>
           );
         })}
@@ -215,7 +228,7 @@ export function FieldEditor({
       {showValidation && (
         <div className="mt-2 space-y-1 text-xs" aria-live="polite">
           <div className="flex flex-wrap gap-3 text-ink-muted">
-            <span>Outside circle: <b className={validation.outsideCircle > (powerplay ? 2 : 5) ? 'text-danger' : 'text-ink'}>{validation.outsideCircle}</b> / {powerplay ? 2 : 5}{powerplay ? ' (powerplay)' : ''}</span>
+            <span>Outside circle: <b className={validation.outsideCircle > maxOut ? 'text-danger' : 'text-ink'}>{validation.outsideCircle}</b> / {maxOut}{powerplay ? ' (powerplay)' : ''}</span>
             <span>Leg side behind square: <b className={validation.legBehindSquare > 2 ? 'text-danger' : 'text-ink'}>{validation.legBehindSquare}</b> / 2</span>
           </div>
           {validation.errors.map((e) => <p key={e} className="text-danger">⚠ Illegal: {e} (deliveries would be called no-ball)</p>)}

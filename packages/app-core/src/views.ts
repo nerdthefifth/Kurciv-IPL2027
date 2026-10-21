@@ -4,7 +4,7 @@ import {
   scoutedRange, strikeRate,
 } from '@kurciv/domain';
 import { COUNTRY_NAMES, leagueById, venueById } from '@kurciv/config';
-import type { MatchState } from '@kurciv/simulation';
+import { autoFor, fieldAssignment, type MatchState } from '@kurciv/simulation';
 import { askingPrice, financeSummary, nextUserFixture, nrr, payrollOf, retentionCost, sortRows, squadOf } from '@kurciv/world';
 
 export function playerView(w: WorldState, p: Player, opts: { detail?: boolean } = {}) {
@@ -207,7 +207,13 @@ export function retentionView(w: WorldState) {
 /** Live match view for the client: hides RNG state and hidden per-match form. */
 export function liveView(state: MatchState, sinceSeq = 0) {
   const { rng: _r, dayForm: _d, deliveries, ...rest } = state;
-  return { ...rest, deliveries: deliveries.filter((d) => d.seq > sinceSeq), totalDeliveries: deliveries.length };
+  const inn = state.innings[state.innings.length - 1];
+  const userSide = state.setup.userSide;
+  return {
+    ...rest, deliveries: deliveries.filter((d) => d.seq > sinceSeq), totalDeliveries: deliveries.length,
+    fielders: inn && !inn.complete ? fieldAssignment(state, inn, null) : [],
+    autoSettings: userSide ? autoFor(state, userSide) : null,
+  };
 }
 
 export function financeView(w: WorldState) {
