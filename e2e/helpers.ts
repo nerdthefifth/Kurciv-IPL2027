@@ -69,3 +69,18 @@ export async function captureDownload(page: Page, trigger: () => Promise<unknown
   const { name, data } = (await handle.jsonValue()) as { name: string; data: string };
   return { name, bytes: Buffer.from(data, 'base64') };
 }
+
+/** Creates a career, lets the assistant run the auction, starts the season and stops on match day. */
+export async function toMatchDay(page: Page, club = 'Gujarat Titans'): Promise<string> {
+  const cid = await createCareer(page, { club, manager: 'Matchday' });
+  await finishAuctionWithAssistant(page, cid);
+  await page.goto(`/c/${cid}`);
+  await page.getByRole('banner').getByRole('button', { name: /Start season/ }).click();
+  await expect(page.getByText('Next chapter').or(page.getByText('Match day')).first()).toBeVisible({ timeout: 60_000 });
+  for (let i = 0; i < 4 && !page.url().endsWith('/match'); i++) {
+    await page.getByRole('banner').getByRole('button', { name: /^(Continue|Play match)/ }).first().click();
+    await page.waitForTimeout(2500);
+  }
+  await expect(page).toHaveURL(/\/match$/, { timeout: 60_000 });
+  return cid;
+}

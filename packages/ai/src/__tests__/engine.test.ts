@@ -82,6 +82,7 @@ describe('match engine', () => {
         applyAction(s, 'away', { type: 'toss', decision: 'bowl' });
         r = step(s, ctl, AiCaptain);
       }
+      if (!r.needs && !r.event) r = step(s, ctl, AiCaptain); // the engine pauses after the toss
       if (s.innings[0].bowlingSide !== 'away') continue;
       if (r.needs?.kind === 'bowler') applyAction(s, 'away', { type: 'bowler', playerId: r.needs.eligible[0] });
       const boundary = BUILT_IN_FIELDS.find((f) => f.id === 'boundary')!; // 5 out: illegal in the powerplay

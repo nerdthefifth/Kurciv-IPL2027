@@ -2,7 +2,7 @@ import { AiCaptain } from '@kurciv/ai';
 import { applyAction, createMatch, currentInnings, step, type Controllers, type DeliveryEvent, type MatchState, type Pending } from '@kurciv/simulation';
 import type { LiveMatch } from './persistence';
 
-export type StepMode = 'ball' | 'over' | 'next-over' | 'key' | 'innings' | 'end';
+export type StepMode = 'toss' | 'ball' | 'over' | 'next-over' | 'key' | 'innings' | 'end';
 
 export function controllersFor(state: MatchState, live: LiveMatch): Controllers {
   let ctl: Controllers = { home: 'ai', away: 'ai' };
@@ -18,7 +18,10 @@ export function controllersFor(state: MatchState, live: LiveMatch): Controllers 
  */
 export function runSteps(live: LiveMatch, mode: StepMode): { events: DeliveryEvent[]; needs: Pending | null } {
   const s = live.state;
-  if (mode === 'end' && s.setup.userSide) {
+  const userSide = s.setup.userSide;
+  const before = controllersFor(s, live);
+  // Instant simulation: the assistant takes the decisions for the simulated stretch.
+  if ((mode === 'end' || mode === 'innings') && userSide) {
     live.ctlTimeline.push({ fromSeq: s.seq, ctl: { home: 'ai', away: 'ai' } });
   }
   const events: DeliveryEvent[] = [];
@@ -27,10 +30,17 @@ export function runSteps(live: LiveMatch, mode: StepMode): { events: DeliveryEve
   const cur = currentInnings(s);
   let oversToFinish = mode === 'next-over' && cur && cur.legalBalls % 6 !== 0 && !cur.complete ? 2 : 1;
   let guard = 0;
+  const restore = () => {
+    if (mode === 'innings' && userSide && s.status !== 'complete') live.ctlTimeline.push({ fromSeq: s.seq, ctl: before });
+  };
   while (s.status !== 'complete' && guard++ < 1500) {
+    if (mode === 'toss' && s.status !== 'toss') break;
     const r = step(s, controllersFor(s, live), AiCaptain);
     if (r.event) events.push(r.event);
-    if (r.needs) return { events, needs: r.needs };
+    if (r.needs) {
+      restore();
+      return { events, needs: r.needs };
+    }
     const ev = r.event;
     if (!ev) continue;
     const inn = currentInnings(s)!;
@@ -49,6 +59,7 @@ export function runSteps(live: LiveMatch, mode: StepMode): { events: DeliveryEve
       if (Math.abs(wp - prev) > 0.08) break;
     }
   }
+  restore();
   return { events, needs: s.pending };
 }
 

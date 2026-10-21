@@ -206,11 +206,15 @@ export function retentionView(w: WorldState) {
 
 /** Live match view for the client: hides RNG state and hidden per-match form. */
 export function liveView(state: MatchState, sinceSeq = 0) {
-  const { rng: _r, dayForm: _d, deliveries, ...rest } = state;
+  const { rng: _r, dayForm: _d, deliveries, pendingMeta, pendingEvent, ...rest } = state;
+  // A decision under review is shown as the captain sees it: never the engine's truth or the tracking.
+  const pe = pendingEvent;
   const inn = state.innings[state.innings.length - 1];
   const userSide = state.setup.userSide;
   return {
     ...rest, deliveries: deliveries.filter((d) => d.seq > sinceSeq), totalDeliveries: deliveries.length,
+    pendingMeta: pendingMeta ? { kind: pendingMeta.kind ?? 'lbw', umpireOut: pendingMeta.umpireOut } : null,
+    pendingEvent: pe ? { seq: pe.seq, innings: pe.innings, over: pe.over, ball: pe.ball, legal: pe.legal, strikerId: pe.strikerId, bowlerId: pe.bowlerId, length: pe.length, line: pe.line, speed: pe.speed, shot: pe.shot, umpireNote: pe.umpireNote } : null,
     fielders: inn && !inn.complete ? fieldAssignment(state, inn, null) : [],
     autoSettings: userSide ? autoFor(state, userSide) : null,
   };

@@ -827,6 +827,7 @@ export class Backend {
       z.object({ type: z.literal('batter'), playerId: id }),
       z.object({ type: z.literal('auto'), settings: z.object({ bowler: z.boolean(), batter: z.boolean(), field: z.boolean(), approach: z.boolean(), plan: z.boolean(), reviews: z.boolean() }).partial() }),
       z.object({ type: z.literal('running'), value: z.enum(['conservative', 'balanced', 'aggressive']) }),
+      z.object({ type: z.literal('phase-intent'), phase: z.enum(['powerplay', 'middle', 'death']), value: z.number().min(0).max(1) }),
       z.object({ type: z.literal('save-field'), name: z.string().trim().min(1).max(40) }),
       z.object({ type: z.literal('bowler-field'), bowlerId: id, templateId: z.string().max(40).nullable() }),
       z.object({ type: z.literal('batter-plan'), batterId: id, vsPace: z.number().min(-0.3).max(0.3).nullable(), vsSpin: z.number().min(-0.3).max(0.3).nullable() }),
@@ -853,7 +854,7 @@ export class Backend {
         return { live: { fixtureId: live.fixtureId, version: live.version, experimental: live.data.experimental, state: liveView(live.data.state, Number(query.get('since') ?? 0)) } };
       });
       r('POST', `/careers/:cid/${base}/step`, async ({ params, body }) => {
-        const { mode, version, since } = parse(z.object({ mode: z.enum(['ball', 'over', 'next-over', 'key', 'innings', 'end']), version: z.number().int(), since: z.number().int().min(0).default(0) }), body);
+        const { mode, version, since } = parse(z.object({ mode: z.enum(['toss', 'ball', 'over', 'next-over', 'key', 'innings', 'end']), version: z.number().int(), since: z.number().int().min(0).default(0) }), body);
         return this.withLock(`${params.cid}:${slot}`, async () => {
           const live = await getLive(params.cid);
           if (live.version !== version) throw new AppError(409, 'The match moved on in another tab.', 'VERSION');

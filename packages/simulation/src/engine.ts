@@ -306,6 +306,12 @@ function applyActionInner(s: MatchState, side: Side, action: MatchAction, inn: I
       s.fieldByBowler = { ...(s.fieldByBowler ?? {}), [side]: cur };
       return { ok: true };
     }
+    case 'phase-intent': {
+      if (s.setup.userSide !== side) return { ok: false, error: 'Phase strategy applies to your own side.' };
+      const t = team(s, side);
+      t.tactics = { ...t.tactics, phaseIntent: { ...t.tactics.phaseIntent, [action.phase]: clamp(action.value, 0, 1) } };
+      return { ok: true };
+    }
     case 'running': {
       if (!['conservative', 'balanced', 'aggressive'].includes(action.value)) return { ok: false, error: 'Unknown running style.' };
       s.running = { ...(s.running ?? {}), [side]: action.value };
@@ -395,43 +401,13 @@ export function step(s: MatchState, ctl: Controllers, captain: Captain): StepRes
     }
     startInnings(s, s.toss.decision === 'bat' ? w : other(w), null, false);
     s.status = 'live';
+    const first = raiseNextOver(s, ctl, captain);
+    return first ? { needs: first } : {}; // pause after the toss so the decision can be shown before the first ball
   }
 
   const inn = currentInnings(s)!;
-  if (inn.currentBowlerId === null) {
-    const side = inn.bowlingSide;
-    const eligible = eligibleBowlers(s, inn);
-    const auto = autoFor(s, side);
-    if (ctl[side] === 'manual' && !auto.bowler) {
-      autoPhaseField(s, inn);
-      if (auto.field || auto.plan) {
-        const adj = captain.overStart(s, side);
-        if (auto.field && adj.field) inn.field = adj.field;
-        if (auto.plan && adj.plan) inn.plan = adj.plan;
-      }
-      if (inn.queuedBowlerId && eligible.includes(inn.queuedBowlerId)) {
-        inn.currentBowlerId = inn.queuedBowlerId;
-        inn.queuedBowlerId = null;
-      } else {
-        inn.queuedBowlerId = null;
-        const suggestion = captain.chooseBowler(s, side);
-        s.pending = { kind: 'bowler', side, suggestion, eligible };
-        return { needs: s.pending };
-      }
-    } else {
-      const manual = ctl[side] === 'manual';
-      if (manual) autoPhaseField(s, inn);
-      inn.currentBowlerId = inn.queuedBowlerId && eligible.includes(inn.queuedBowlerId) && manual ? inn.queuedBowlerId : captain.chooseBowler(s, side);
-      inn.queuedBowlerId = null;
-      const adj = captain.overStart(s, side);
-      // Automation never overrides a manual decision: for the user's side only automated areas change.
-      if (adj.field && (!manual || auto.field)) inn.field = adj.field;
-      if (adj.plan && (!manual || auto.plan)) inn.plan = adj.plan;
-      if (adj.mirror !== undefined && !manual) inn.mirror = adj.mirror;
-    }
-    inn.bowlers[inn.currentBowlerId!] ??= emptyBowler(inn.currentBowlerId!);
-    if (ctl[side] === 'manual' && !auto.field) applyBowlerPreset(s, inn);
-  }
+  const over = startOver(s, inn, ctl, captain);
+  if (over) return { needs: over };
 
   const rng = new Rng(s.rng);
   const { ev, lbw } = deliver(s, inn, ctl, captain, rng);
@@ -469,8 +445,61 @@ export function step(s: MatchState, ctl: Controllers, captain: Captain): StepRes
 
   s.rng = rng.state();
   finalize(s, inn, ev, ctl, captain);
-  return { event: ev };
+  const next = s.pending ? null : raiseNextOver(s, ctl, captain);
+  return next ? { event: ev, needs: next } : { event: ev };
 }
+
+/**
+ * Start-of-over decisions: who bowls, and (for automated areas) the field and plan.
+ * Returns a pending decision when the user has to choose the bowler.
+ */
+function startOver(s: MatchState, inn: InningsState, ctl: Controllers, captain: Captain): Pending | null {
+  if (inn.currentBowlerId === null) {
+    const side = inn.bowlingSide;
+    const eligible = eligibleBowlers(s, inn);
+    const auto = autoFor(s, side);
+    if (ctl[side] === 'manual' && !auto.bowler) {
+      autoPhaseField(s, inn);
+      if (auto.field || auto.plan) {
+        const adj = captain.overStart(s, side);
+        if (auto.field && adj.field) inn.field = adj.field;
+        if (auto.plan && adj.plan) inn.plan = adj.plan;
+      }
+      if (inn.queuedBowlerId && eligible.includes(inn.queuedBowlerId)) {
+        inn.currentBowlerId = inn.queuedBowlerId;
+        inn.queuedBowlerId = null;
+      } else {
+        inn.queuedBowlerId = null;
+        const suggestion = captain.chooseBowler(s, side);
+        s.pending = { kind: 'bowler', side, suggestion, eligible };
+        return s.pending;
+      }
+    } else {
+      const manual = ctl[side] === 'manual';
+      if (manual) autoPhaseField(s, inn);
+      inn.currentBowlerId = inn.queuedBowlerId && eligible.includes(inn.queuedBowlerId) && manual ? inn.queuedBowlerId : captain.chooseBowler(s, side);
+      inn.queuedBowlerId = null;
+      const adj = captain.overStart(s, side);
+      // Automation never overrides a manual decision: for the user's side only automated areas change.
+      if (adj.field && (!manual || auto.field)) inn.field = adj.field;
+      if (adj.plan && (!manual || auto.plan)) inn.plan = adj.plan;
+      if (adj.mirror !== undefined && !manual) inn.mirror = adj.mirror;
+    }
+    inn.bowlers[inn.currentBowlerId!] ??= emptyBowler(inn.currentBowlerId!);
+    if (ctl[side] === 'manual' && !auto.field) applyBowlerPreset(s, inn);
+  }
+  return null;
+}
+
+/** For a side the user bowls by hand, raise the bowler choice as soon as an over ends. */
+function raiseNextOver(s: MatchState, ctl: Controllers, captain: Captain): Pending | null {
+  if (s.status !== 'live' || s.pending) return null;
+  const inn = currentInnings(s);
+  if (!inn || inn.complete || inn.currentBowlerId !== null) return null;
+  if (ctl[inn.bowlingSide] !== 'manual' || autoFor(s, inn.bowlingSide).bowler) return null;
+  return startOver(s, inn, ctl, captain);
+}
+
 
 /**
  * Resolves a review from the stored evidence. The event has not been applied to the scorecard

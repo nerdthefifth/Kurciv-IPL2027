@@ -282,6 +282,7 @@ export type MatchAction =
   | { type: 'running'; value: RunningStyle }
   | { type: 'bowler-field'; bowlerId: string; templateId: string | null }
   | { type: 'save-field'; name: string }
+  | { type: 'phase-intent'; phase: 'powerplay' | 'middle' | 'death'; value: number }
   | { type: 'batter-plan'; batterId: string; vsPace: number | null; vsSpin: number | null }
   | { type: 'bowler'; playerId: string }
   | { type: 'field'; positions: FieldPoint[]; keeperUp: boolean; templateId?: string | null; name?: string }
