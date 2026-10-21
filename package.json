@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Kurciv IPL 2027 — cricket management universe",
+  "engines": { "node": ">=22.13" },
   "workspaces": [
     "packages/*",
     "apps/*"

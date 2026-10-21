@@ -1,5 +1,24 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import type { WorldState } from '@kurciv/domain';
+import { applyImages, manifestProvider, validateManifest, type ImageProvider } from '@kurciv/data-ingestion';
+
+/**
+ * Optional licensed-portrait manifest (KURCIV_IMAGE_MANIFEST). Invalid entries are skipped and
+ * reported; a missing or unreadable manifest never stops a career from being created.
+ */
+function loadImageProvider(): ImageProvider | null {
+  const file = process.env.KURCIV_IMAGE_MANIFEST;
+  if (!file) return null;
+  try {
+    const { valid, rejected } = validateManifest(JSON.parse(fs.readFileSync(file, 'utf8')));
+    if (rejected.length) console.warn(`Image manifest: ${rejected.length} entries rejected (first: ${rejected[0].reason})`);
+    return manifestProvider(valid);
+  } catch (e) {
+    console.warn(`Image manifest unavailable (${(e as Error).message}); using silhouettes.`);
+    return null;
+  }
+}
 import type { MatchState } from '@kurciv/simulation';
 import { createWorld, type CreateCareerInput, type MatchRecord } from '@kurciv/world';
 import { audit, pack, tx, unpack, type DB } from './db';
@@ -50,6 +69,8 @@ export class CareerStore {
     let world: WorldState;
     try {
       world = createWorld({ ...input, careerId: id, seed });
+      const images = loadImageProvider();
+      if (images) applyImages(world, images);
     } catch (e) {
       throw new HttpError(400, (e as Error).message);
     }

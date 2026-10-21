@@ -15,8 +15,27 @@ export interface PressureReading {
   reasons: string[];
 }
 
-const recentLegal = (s: MatchState, inn: InningsState, n: number) =>
-  s.deliveries.filter((d) => d.innings === inn.index && d.legal).slice(-n);
+/** Last `n` legal deliveries of this innings — scans backwards so cost is O(n), not O(match). */
+function recentLegal(s: MatchState, inn: InningsState, n: number) {
+  const out = [];
+  for (let i = s.deliveries.length - 1; i >= 0 && out.length < n; i--) {
+    const d = s.deliveries[i];
+    if (d.innings !== inn.index) break;
+    if (d.legal) out.unshift(d);
+  }
+  return out;
+}
+
+function currentOver(s: MatchState, inn: InningsState, bowlerId: string) {
+  const over = Math.floor(inn.legalBalls / 6);
+  const out = [];
+  for (let i = s.deliveries.length - 1; i >= 0; i--) {
+    const d = s.deliveries[i];
+    if (d.innings !== inn.index || d.over !== over) break;
+    if (d.bowlerId === bowlerId) out.push(d);
+  }
+  return out;
+}
 
 export function batterPressure(s: MatchState, inn: InningsState, striker: MatchPlayer): PressureReading {
   const reasons: string[] = [];
@@ -67,7 +86,7 @@ export function bowlerPressure(s: MatchState, inn: InningsState, bowler: MatchPl
   const reasons: string[] = [];
   let p = 0;
   let boost = 0;
-  const thisOver = s.deliveries.filter((d) => d.innings === inn.index && d.over === Math.floor(inn.legalBalls / 6) && d.bowlerId === bowler.id);
+  const thisOver = currentOver(s, inn, bowler.id);
   const hits = thisOver.filter((d) => d.boundary).length;
   if (hits >= 1) {
     p += Math.min(0.6, hits * 0.22);
