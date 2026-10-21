@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --lime: #c6ff1a;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background-color: #07080a;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+}
+
+/* Carbon-fibre weave, pure CSS so it costs nothing to load */
+.carbon {
+  background-color: #0c0d10;
+  background-image:
+    linear-gradient(27deg, #101216 5px, transparent 5px),
+    linear-gradient(207deg, #101216 5px, transparent 5px),
+    linear-gradient(27deg, #0e1013 5px, transparent 5px),
+    linear-gradient(207deg, #0e1013 5px, transparent 5px),
+    linear-gradient(90deg, #0b0c0f 10px, transparent 10px),
+    linear-gradient(#0d0f12 25%, #0b0c0f 25%, #0b0c0f 50%, transparent 50%, transparent 75%, #101216 75%, #101216);
+  background-size: 20px 20px, 20px 20px, 20px 20px, 20px 20px, 20px 20px, 20px 20px;
+  background-position: 0 5px, 10px 0, 0 10px, 10px 5px, 0 0, 0 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-obsidian-700 bg-obsidian-900/90 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset];
+  }
+  .card-pad {
+    @apply p-4 md:p-5;
+  }
+  .h-section {
+    @apply font-display text-lg font-semibold uppercase tracking-wider text-ink;
+  }
+  .label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply btn bg-lime text-obsidian-950 hover:bg-lime-400;
+  }
+  .btn-ghost {
+    @apply btn border border-obsidian-600 bg-obsidian-800 text-ink hover:border-obsidian-500 hover:bg-obsidian-700;
+  }
+  .btn-danger {
+    @apply btn border border-danger/40 bg-danger/10 text-danger hover:bg-danger/20;
+  }
+  .input {
+    @apply w-full rounded-lg border border-obsidian-600 bg-obsidian-850 px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-lime/60 focus:outline-none;
+  }
+  .table {
+    @apply w-full text-left text-sm;
+  }
+  .table th {
+    @apply whitespace-nowrap border-b border-obsidian-700 px-2 py-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted;
+  }
+  .table td {
+    @apply whitespace-nowrap border-b border-obsidian-800 px-2 py-2;
+  }
+  .table tbody tr:hover {
+    @apply bg-obsidian-800/60;
+  }
+  .num {
+    @apply font-display tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+.reduced-motion *,
+.reduced-motion *::before,
+.reduced-motion *::after {
+  animation-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
+}
+
+@keyframes flash-lime {
+  0% { box-shadow: 0 0 0 0 rgba(198, 255, 26, 0.6); }
+  100% { box-shadow: 0 0 0 18px rgba(198, 255, 26, 0); }
+}
+.flash {
+  animation: flash-lime 0.9s ease-out;
+}
+@keyframes pop {
+  0% { transform: scale(0.85); opacity: 0; }
+  60% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.pop {
+  animation: pop 0.35s ease-out;
+}

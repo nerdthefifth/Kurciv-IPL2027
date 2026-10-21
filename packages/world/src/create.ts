@@ -33,13 +33,14 @@ export interface CreateCareerInput {
 
 const COACH_NAMES = ['R. Menon', 'D. Fleming', 'A. Kumble', 'T. Moody', 'M. Boucher', 'S. Bond', 'P. Upton', 'L. Klusener', 'J. Lewis', 'K. Sangakkara', 'B. McCullum', 'A. Flower', 'R. Ponting', 'C. Silverwood', 'G. Kirsten', 'D. Vettori', 'M. Hussey', 'S. Pollock', 'N. Hussain', 'W. Akram'];
 
-function coachesFor(rng: Rng, brand: number): Coach[] {
+/** Staff salaries scale with the league economy (purse) so a club pays exactly what is listed. */
+function coachesFor(rng: Rng, brand: number, purseScale: number): Coach[] {
   const base = 48 + brand * 0.3;
   const mk = (role: Coach['role']): Coach => {
     const rating = Math.round(Math.max(35, Math.min(92, rng.normal(base, 7))));
     // Fictional staff: initials + a surname pool, never presented as real people's records.
     const name = `${String.fromCharCode(65 + rng.int(0, 25))}. ${rng.pick(COACH_NAMES).split(' ')[1]}`;
-    return { name, role, rating, salary: Math.round(rating * 0.04 * 100) / 100 };
+    return { name, role, rating, salary: Math.round(rating * 0.04 * (purseScale * 0.9 + 0.1) * 100) / 100 };
   };
   return [mk('head'), mk('batting'), mk('bowling'), mk('fielding')];
 }
@@ -68,7 +69,7 @@ function makeClub(seed: (typeof CLUB_SEEDS)[string][number], leagueId: string, r
     cash: Math.round((10 + seed.brand * 0.35 * (league.commercialValue / 80)) * 100) / 100,
     brand: seed.brand, fanBase: Math.round(seed.brand * 0.9 + rng.range(0, 10)), elo: 1500 + (league.initialReputation - 70) * 6,
     facilities: { training: fac(seed.brand), youth: fac(seed.brand - 5), medical: fac(seed.brand), scouting: fac(seed.brand - 5) },
-    coaches: coachesFor(rng, seed.brand),
+    coaches: coachesFor(rng, seed.brand, league.auctionRules.purse / 120),
     board: { confidence: 60, objectives: [], warnings: 0 },
     dna: { aggression: 50, spinReliance: 50, paceReliance: 50, youthTrust: 50, fieldAttack: 50, samples: 0 },
     trophies: [], fieldTemplates: [], defaultTactics: defaultTactics(), retentionsLocked: false, retentionChoices: [],

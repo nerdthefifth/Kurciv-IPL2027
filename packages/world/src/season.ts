@@ -44,7 +44,8 @@ function boardObjectives(w: WorldState, club: Club): BoardObjective[] {
   };
   const rank = [...clubs].sort((a, b) => strength(b) - strength(a)).findIndex((c) => c.id === club.id) + 1;
   const objs: BoardObjective[] = [];
-  const target = Math.min(clubs.length, Math.max(1, rank + 1));
+  // Never easier than "avoid the wooden spoon"; stronger squads are expected to finish near their ranking.
+  const target = Math.min(clubs.length - 1, Math.max(1, rank + 1));
   objs.push({ id: nextId(w, 'obj'), description: `Finish in the top ${target} of the ${l.shortName} table (squad ranked #${rank} by the board).`, kind: 'league-position', target, importance: 'high', status: 'pending' });
   if (rank <= 4) objs.push({ id: nextId(w, 'obj'), description: 'Reach the playoffs.', kind: 'playoffs', target: 4, importance: 'medium', status: 'pending' });
   if (w.leagues[l.id].wccSlots > 0 && rank <= w.leagues[l.id].wccSlots + 1) objs.push({ id: nextId(w, 'obj'), description: 'Qualify for the World Club Championship.', kind: 'wcc-qualify', target: 1, importance: 'medium', status: 'pending' });

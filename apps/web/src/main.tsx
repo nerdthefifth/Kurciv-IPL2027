@@ -1,0 +1,91 @@
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import './index.css';
+import { AuthProvider, CareerProvider, ToastProvider, useAuth } from './lib/context';
+import { PlayerModalProvider } from './components/player';
+import { Shell } from './components/Shell';
+import { Loading } from './components/ui';
+import { AuthPage } from './pages/Auth';
+import { CareersPage } from './pages/Careers';
+import { NewCareerPage } from './pages/NewCareer';
+import { OverviewPage } from './pages/Overview';
+import { SquadPage } from './pages/Squad';
+import { TacticsPage } from './pages/Tactics';
+import { MatchCentrePage } from './pages/MatchCentre';
+import { FixturesPage, MatchReportPage } from './pages/Fixtures';
+import { TablePage } from './pages/Table';
+import { AuctionPage } from './pages/Auction';
+import { TransfersPage } from './pages/Transfers';
+import { YouthPage } from './pages/Youth';
+import { TrainingPage } from './pages/Training';
+import { MedicalPage } from './pages/Medical';
+import { FinancesPage } from './pages/Finances';
+import { ScoutingPage } from './pages/Scouting';
+import { WorldPage } from './pages/World';
+import { InternationalPage } from './pages/International';
+import { HistoryPage } from './pages/History';
+import { SettingsPage } from './pages/Settings';
+import { ClubPage } from './pages/Club';
+import { LabPage } from './pages/Lab';
+
+function CareerRoutes() {
+  const { cid } = useParams();
+  return (
+    <CareerProvider id={cid!}>
+      <PlayerModalProvider>
+        <Shell>
+          <Routes>
+            <Route index element={<OverviewPage />} />
+            <Route path="squad" element={<SquadPage />} />
+            <Route path="tactics" element={<TacticsPage />} />
+            <Route path="match" element={<MatchCentrePage />} />
+            <Route path="fixtures" element={<FixturesPage />} />
+            <Route path="fixtures/:fid" element={<MatchReportPage />} />
+            <Route path="table" element={<TablePage />} />
+            <Route path="auction" element={<AuctionPage />} />
+            <Route path="transfers" element={<TransfersPage />} />
+            <Route path="youth" element={<YouthPage />} />
+            <Route path="training" element={<TrainingPage />} />
+            <Route path="medical" element={<MedicalPage />} />
+            <Route path="finances" element={<FinancesPage />} />
+            <Route path="scouting" element={<ScoutingPage />} />
+            <Route path="world" element={<WorldPage />} />
+            <Route path="international" element={<InternationalPage />} />
+            <Route path="history" element={<HistoryPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="club/:clubId" element={<ClubPage />} />
+            <Route path="lab" element={<LabPage />} />
+            <Route path="*" element={<Navigate to="" replace />} />
+          </Routes>
+        </Shell>
+      </PlayerModalProvider>
+    </CareerProvider>
+  );
+}
+
+function Gate() {
+  const { user, ready } = useAuth();
+  if (!ready) return <Loading label="Starting Kurciv…" />;
+  if (!user) return <AuthPage />;
+  return (
+    <Routes>
+      <Route path="/" element={<CareersPage />} />
+      <Route path="/new" element={<NewCareerPage />} />
+      <Route path="/c/:cid/*" element={<CareerRoutes />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <ToastProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Gate />
+        </BrowserRouter>
+      </AuthProvider>
+    </ToastProvider>
+  </StrictMode>,
+);

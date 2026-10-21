@@ -119,7 +119,7 @@ export function overview(w: WorldState) {
   if (injured.length) urgent.push(`${injured.length} player(s) injured.`);
   if (c.board.confidence < 30) urgent.push(`Board confidence is low (${c.board.confidence}).`);
   return {
-    season: w.season, day: w.day, phase: w.phase, managerName: w.managerName, difficulty: w.difficulty,
+    season: w.season, day: w.day, phase: w.phase, managerName: w.managerName, difficulty: w.difficulty, settings: w.settings,
     club: clubView(w, c),
     nextFixture: next ? fixtureView(w, next) : null,
     recent: recent.map((f) => fixtureView(w, f)),

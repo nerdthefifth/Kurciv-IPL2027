@@ -286,6 +286,30 @@ export function apiRouter(db: DB, store: CareerStore) {
     return opponentReport(w, req.params.clubId, records);
   }));
 
+  c.get('/prematch/:fid', wrap((req) => {
+    const { world: w } = world(req);
+    const fx = w.fixtures[req.params.fid];
+    if (!fx?.involvesUser || !fx.homeId || !fx.awayId) throw new HttpError(404, 'Fixture not found.');
+    const venue = VENUES.find((v) => v.id === (fx.venueId || w.clubs[fx.homeId].venueId))!;
+    const user = w.clubs[w.userClubId];
+    const oppId = fx.homeId === user.id ? fx.awayId : fx.homeId;
+    const opp = w.clubs[oppId];
+    const mine = selectXI(w, user, fx);
+    const theirs = selectXI(w, opp, fx);
+    const records = [...store.seasonRecords(req.params.cid, req.userId!, w.season, [oppId]), ...store.seasonRecords(req.params.cid, req.userId!, w.season - 1, [oppId])];
+    const intel = opponentReport(w, oppId, records);
+    const key = [user.id, oppId].sort().join('|');
+    return {
+      fixture: fixtureView(w, fx), today: fx.day === w.day,
+      venue: { name: venue.name, city: venue.city, boundaryStraight: venue.boundaryStraight, boundarySquare: venue.boundarySquare, altitude: venue.altitude, pitch: venue.pitch, dewChance: venue.dewChance },
+      user: clubView(w, user), opponent: clubView(w, opp),
+      userXI: mine.xi.map((p) => playerView(w, p)), userXINote: mine.note, lineupSaved: !!user.lineup,
+      opponentXI: theirs.xi.map((p) => playerView(w, p)),
+      intel: { recommendations: intel.recommendations, matches: intel.matches, team: intel.team },
+      headToHead: w.rivalries[key] ?? null,
+    };
+  }));
+
   // ---------------------------------------------------------------- auction
   c.get('/auction', wrap((req) => {
     const { world: w } = world(req);

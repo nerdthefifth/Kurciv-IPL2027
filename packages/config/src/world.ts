@@ -71,9 +71,8 @@ export const WORLD = {
 
   finance: {
     ticketPerHomeMatch: 1.6, // crore at brand 100
-    sponsorshipBase: 35,
-    broadcastShare: { IPL: 60 } as Record<string, number>,
-    broadcastDefault: 6,
+    sponsorshipShare: 0.35, // of league purse, before brand/reputation multipliers
+    broadcastShare: 0.75, // of league purse, before reputation multiplier
     facilityUpkeep: 0.8, // per level per season
     facilityUpgradeCost: [0, 6, 10, 16, 24],
     coachSalaryScale: 0.04,

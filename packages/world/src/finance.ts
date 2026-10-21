@@ -24,15 +24,18 @@ export function seasonStartFinances(w: WorldState) {
     const l = leagueById(club.leagueId);
     const rep = w.leagues[l.id].reputation;
     const scale = l.auctionRules.purse / 120;
-    const sponsorship = WORLD.finance.sponsorshipBase * scale * (0.5 + club.brand / 100) * (0.6 + rep / 250);
+    // Central rights and sponsorship scale with the league's economy (its purse) and reputation,
+    // so a well-run club can afford a full-purse squad; brand and success add on top.
+    const purse = l.auctionRules.purse;
+    const sponsorship = purse * WORLD.finance.sponsorshipShare * (0.5 + club.brand / 100) * (0.6 + rep / 250);
     recordTransaction(w, club.id, 'sponsorship', sponsorship, `${w.season} sponsorship portfolio`);
-    const broadcast = (WORLD.finance.broadcastShare[l.id] ?? WORLD.finance.broadcastDefault) * (0.7 + rep / 330);
+    const broadcast = purse * WORLD.finance.broadcastShare * (0.7 + rep / 330);
     recordTransaction(w, club.id, 'broadcast', broadcast, `${l.shortName} central rights share`);
     recordTransaction(w, club.id, 'salary', -payrollOf(w, club), `${w.season} player salaries`);
-    const staff = club.coaches.reduce((s, c) => s + c.salary, 0) * (scale * 3 + 0.4);
+    const staff = club.coaches.reduce((s, c) => s + c.salary, 0);
     recordTransaction(w, club.id, 'staff', -staff, 'Coaching staff');
     const fac = club.facilities;
-    const upkeep = (fac.training + fac.youth + fac.medical + fac.scouting) * WORLD.finance.facilityUpkeep * (scale * 2 + 0.2);
+    const upkeep = (fac.training + fac.youth + fac.medical + fac.scouting) * WORLD.finance.facilityUpkeep * (scale * 0.8 + 0.1);
     recordTransaction(w, club.id, 'facility', -upkeep, 'Facility upkeep');
   }
 }
