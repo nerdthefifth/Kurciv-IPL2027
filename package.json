@@ -20,13 +20,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "lab": "tsx tools/sim-lab.ts",
     "world-report": "tsx tools/world-report.ts",
-    "validate-data": "tsx packages/data-ingestion/src/cli.ts"
+    "validate-data": "tsx packages/data-ingestion/src/cli.ts",
+    "ingest": "tsx tools/ingest-cricsheet.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",
     "@types/node": "22.10.2",
     "concurrently": "9.1.0",
     "fake-indexeddb": "^6.0.0",
+    "fflate": "^0.8.2",
     "tsx": "4.19.2",
     "typescript": "5.6.3",
     "vitest": "2.1.8"

@@ -2,21 +2,24 @@ import type { Club, CountryCode, Fixture, InningsSummary, MatchResultSummary, Pl
 import { emptyStatLine, isSpin, overall, validateXI } from '@kurciv/domain';
 import { leagueById, venueById } from '@kurciv/config';
 import { ENGINE_VERSION, T20_RULES, type MatchSetup, type MatchState, type Side } from '@kurciv/simulation';
-import { battingOrder, buildTeamSetup, pickXI } from '@kurciv/ai';
+import { battingOrder, buildTeamSetup, explainXI, pickXI } from '@kurciv/ai';
 import { applyToStandings } from './competition';
 import { applyMatchLoad, rollInjury, updateForm, updateMorale } from './condition';
 import { matchdayIncome } from './finance';
 import { addNews, clamp, squadOf, worldRng } from './util';
 import { addTimeline, storiesAfterUserMatch } from './story';
 import { beginImpact, completeImpact } from './impact';
+import { recordTeamSheet } from './clubworld/sync';
+import { leadershipEdge, matchCaptain } from './captaincy';
 
 const DIFFICULTY_QUALITY = { rookie: 0.35, professional: 0.55, elite: 0.72, legend: 0.88 } as const;
 
 export function tacticalQuality(w: WorldState, club: Club): number {
   const head = club.coaches.find((c) => c.role === 'head')?.rating ?? 55;
   const coach = (head - 60) / 250;
-  if (club.isUser) return clamp(0.5 + coach, 0.2, 0.85);
-  return clamp(DIFFICULTY_QUALITY[w.difficulty] + coach, 0.15, 0.97);
+  const lead = leadershipEdge(w, club);
+  if (club.isUser) return clamp(0.5 + coach + lead, 0.2, 0.9);
+  return clamp(DIFFICULTY_QUALITY[w.difficulty] + coach + lead, 0.15, 0.97);
 }
 
 export function matchImportance(w: WorldState, fx: Fixture): number {
@@ -34,18 +37,24 @@ function domesticOf(w: WorldState, club: Club, fx: Fixture): CountryCode[] {
   return leagueById(club.leagueId).domesticCountries;
 }
 
-/** The XI a club will field. The user's saved lineup is used when valid. */
-export function selectXI(w: WorldState, club: Club, fx: Fixture): { xi: Player[]; note: string | null } {
+/**
+ * The XI a club will field. The user's saved lineup is used when valid; otherwise (and for
+ * every AI club) the selector picks for the venue's surface, resting tired and injured players.
+ */
+export function selectXI(w: WorldState, club: Club, fx: Fixture): { xi: Player[]; note: string | null; reasons: string[] } {
   const l = leagueById(club.leagueId);
   const squad = squadOf(w, club);
+  const pitch = venueById(fx.venueId || w.clubs[fx.homeId].venueId).pitch;
+  const auto = () => pickXI(squad, l.squadRules, domesticOf(w, club, fx), pitch);
   if (club.isUser && club.lineup?.length) {
     const xi = club.lineup.map((id) => w.players[id]).filter(Boolean);
     const v = validateXI(xi, club.squad, l.squadRules, l.domesticCountries);
-    if (v.ok) return { xi, note: null };
-    const auto = pickXI(squad, l.squadRules, domesticOf(w, club, fx));
-    return { xi: auto, note: `Saved XI was invalid (${v.errors[0]}); the assistant picked the side.` };
+    if (v.ok) return { xi, note: null, reasons: [] };
+    const picked = auto();
+    return { xi: picked, note: `Saved XI was invalid (${v.errors[0]}); the assistant picked the side.`, reasons: explainXI(picked, squad, pitch) };
   }
-  return { xi: pickXI(squad, l.squadRules, domesticOf(w, club, fx)), note: null };
+  const picked = auto();
+  return { xi: picked, note: null, reasons: explainXI(picked, squad, pitch) };
 }
 
 export function buildMatchSetup(w: WorldState, fx: Fixture, userXI?: Player[]): MatchSetup {
@@ -60,7 +69,7 @@ export function buildMatchSetup(w: WorldState, fx: Fixture, userXI?: Player[]): 
     const tendencies = club.isUser && tend.userBattingVsPace.length >= 3
       ? { vsPace: avg(tend.userBattingVsPace)!, vsSpin: avg(tend.userBattingVsSpin.length ? tend.userBattingVsSpin : [1.35])! }
       : undefined;
-    return buildTeamSetup(club, ordered, club.defaultTactics, tacticalQuality(w, club), tendencies);
+    return buildTeamSetup(club, ordered, club.defaultTactics, tacticalQuality(w, club), tendencies, matchCaptain(club, ordered.map((p) => p.id)));
   };
   const userSide: Side | null = fx.homeId === w.userClubId ? 'home' : fx.awayId === w.userClubId ? 'away' : null;
   const comp = w.competitions[fx.competitionId];
@@ -258,6 +267,7 @@ export function applyMatch(w: WorldState, fx: Fixture, s: MatchState) {
     }
   }
 
+  if (fx.involvesUser) recordTeamSheet(w, fx, s);
   // --- Elo, upsets, finances, rivalry, records
   const before = eloUpdate(w, fx, winnerId);
   if (winnerId) {

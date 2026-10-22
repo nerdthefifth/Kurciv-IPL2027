@@ -4,6 +4,7 @@ import { leagueById, venueById } from '@kurciv/config';
 import { Rng } from '@kurciv/simulation';
 import { nextUserFixture, nrr, sortRows, squadOf, squadProblems } from '@kurciv/world';
 import { userAuctionOf } from './auction-view';
+import { inboxCounts } from './clubworld-views';
 import { clubView, fixtureView } from './views';
 
 function formOf(w: WorldState, clubId: string, n = 5): ('W' | 'L' | 'T')[] {
@@ -99,9 +100,12 @@ export function clubhouse(w: WorldState) {
   if (!u.lineup && squad.length >= 11 && (w.phase === 'season' || w.phase === 'preseason')) decisions.push({ label: 'Select your XI', detail: 'The assistant is picking the side. Set your own XI and batting order.', page: 'squad', urgency: 'normal' });
   const injured = squad.filter((p) => p.injury);
   if (u.lineup?.some((id) => w.players[id]?.injury)) decisions.push({ label: 'An injured player is in your XI', detail: 'Update the lineup before the next match.', page: 'squad', urgency: 'high' });
+  const cwc = inboxCounts(w);
+  if (cwc.actions) decisions.push({ label: `${cwc.actions} decision${cwc.actions === 1 ? '' : 's'} in your inbox`, detail: cwc.talks ? `${cwc.talks} player${cwc.talks === 1 ? ' is' : 's are'} waiting for a reply.` : 'Requests from the board, staff and media.', page: 'inbox', urgency: cwc.urgent ? 'high' : 'normal' });
   if (w.phase === 'offseason') decisions.push({ label: 'Read the season chronicle', detail: 'Then begin the off-season.', page: 'history', urgency: 'normal' });
   const odds = qualificationOdds(w);
   return {
+    clubWorld: inboxCounts(w),
     season: w.season, day: w.day, phase: w.phase, managerName: w.managerName, difficulty: w.difficulty, settings: w.settings,
     club: clubView(w, u),
     nextChapter: next ? { fixture: fixtureView(w, next), ...fixturePreview(w, next), today: next.day === w.day } : null,
@@ -117,7 +121,7 @@ export function clubhouse(w: WorldState) {
     glance: {
       position: me >= 0 ? me + 1 : null, teams: rows.length, points: rows[me]?.points ?? null, played: rows[me]?.played ?? null,
       nrr: rows[me] ? nrr(rows[me]) : null, form: formOf(w, u.id), odds,
-      objectives: u.board.objectives, confidence: u.board.confidence,
+      objectives: u.board.objectives, confidence: Math.round(u.board.confidence),
       table: rows.slice(0, 10).map((r, i) => ({ pos: i + 1, clubId: r.clubId, short: w.clubs[r.clubId].shortName, name: w.clubs[r.clubId].name, colors: w.clubs[r.clubId].colors, points: r.points, played: r.played, isUser: r.clubId === u.id })),
     },
     stories: w.stories.filter((s) => s.status === 'active').slice(0, 6),

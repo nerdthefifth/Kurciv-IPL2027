@@ -159,14 +159,14 @@ export function keyMoments(s: MatchState, rep: Partial, names: Map<string, { nam
 
   // Tactical changes by the user (observations only).
   if (s.setup.userSide) {
-    for (const a of s.actions.filter((x) => x.side === s.setup.userSide && (x.action.type === 'field' || x.action.type === 'plan'))) {
+    for (const a of s.actions.filter((x) => x.side === s.setup.userSide && x.action.type === 'plan')) {
       const d = s.deliveries.find((x) => x.seq > a.seq);
       if (!d) continue;
       const nextOvers = s.deliveries.filter((x) => x.innings === d.innings && x.over >= d.over && x.over < d.over + 2);
       const runs = nextOvers.reduce((t, x) => t + x.totalRuns, 0);
       const wk = nextOvers.filter((x) => x.wicket).length;
       push(d, {
-        kind: 'tactic', title: a.action.type === 'field' ? `Field change${a.action.type === 'field' && a.action.name ? `: ${a.action.name}` : ''}` : 'New bowling plan',
+        kind: 'tactic', title: 'New bowling plan',
         detail: `The next two overs went for ${runs} with ${wk} wicket${wk === 1 ? '' : 's'}.`, clubId: s.setup[s.setup.userSide].clubId, important: false,
       });
     }

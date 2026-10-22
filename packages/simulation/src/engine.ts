@@ -3,7 +3,7 @@ import { choosePlayerOfMatch } from './award';
 import { isSpin, speedScore } from '@kurciv/domain';
 import { SIM } from '@kurciv/config';
 import { Rng, clamp, sigmoid } from './rng';
-import { STRIKER, direction, distanceToBoundary, fitToVenue, insideCircle, mirror, validateField, zoneOf, ZONES } from './geometry';
+import { BUILT_IN_FIELDS, STRIKER, direction, distanceToBoundary, fitToVenue, insideCircle, mirror, validateField, zoneOf, ZONES } from './geometry';
 import { SHOTS, shotAngle, type ShotDef } from './shots';
 import { commentaryFor } from './commentary';
 import { winProbabilityHome } from './winprob';
@@ -95,9 +95,16 @@ function emptyBowler(id: string): BowlerInnings {
   return { playerId: id, balls: 0, runs: 0, wickets: 0, dots: 0, wides: 0, noBalls: 0, maidens: 0, fours: 0, sixes: 0, spellFatigue: 0 };
 }
 
-function fieldFromTemplate(s: MatchState, side: Side, templateId: string): FieldSetting {
-  const t = team(s, side).fields.find((f) => f.id === templateId) ?? team(s, side).fields[0];
-  return { templateId: t.id, name: t.name, positions: t.positions.map((p) => ({ ...p })), keeperUp: t.keeperUp };
+/**
+ * Field placement is not a tactical decision: every side uses the same standard field for each
+ * phase (mirrored for left-handers), with the keeper standing up to spin.
+ */
+const STANDARD_FIELD = { powerplay: 'pp-control', middle: 'mid-pace', death: 'death-yorker' } as const;
+
+function setStandardField(s: MatchState, inn: InningsState) {
+  const t = BUILT_IN_FIELDS.find((f) => f.id === STANDARD_FIELD[phaseOf(inn, s.setup.rules.powerplayOvers, s.setup.rules.overs)])!;
+  const bowler = inn.currentBowlerId ? team(s, inn.bowlingSide).xi.find((p) => p.id === inn.currentBowlerId) : null;
+  inn.field = { templateId: t.id, name: 'Standard field', positions: t.positions.map((p) => ({ ...p })), keeperUp: !!bowler && isSpin(bowler.bowlType) };
 }
 
 function clonePlan(p: BowlingPlan): BowlingPlan {
@@ -132,9 +139,9 @@ function startInnings(s: MatchState, battingSide: Side, target: number | null, s
     overRuns: [],
     overWickets: [],
     overs: [],
-    field: fieldFromTemplate(s, bowlSide, superOver ? bowl.tactics.fieldTemplateByPhase.death : bowl.tactics.fieldTemplateByPhase.powerplay),
+    field: { templateId: null, name: 'Standard field', positions: [], keeperUp: false },
     fieldOverridePhase: null,
-    mirror: bowl.tactics.mirrorForLeftHanders,
+    mirror: true,
     plan: clonePlan(bowl.tactics.bowlingPlan),
     intent: null,
     batterIntent: {},
@@ -147,6 +154,7 @@ function startInnings(s: MatchState, battingSide: Side, target: number | null, s
     observed: { pace: { runs: 0, balls: 0, wickets: 0 }, spin: { runs: 0, balls: 0, wickets: 0 } },
     zoneRuns: [0, 0, 0, 0, 0, 0, 0, 0],
   };
+  setStandardField(s, inn);
   s.innings.push(inn);
 }
 
@@ -221,34 +229,14 @@ function applyActionInner(s: MatchState, side: Side, action: MatchAction, inn: I
         return { ok: false, error: `${p.name} is not an available bowler.` };
       }
       if (inn.currentBowlerId === null) {
-        autoPhaseField(s, inn); // idempotent; keeps replays identical whether or not a prompt was shown
         inn.currentBowlerId = action.playerId;
         inn.bowlers[action.playerId] ??= emptyBowler(action.playerId);
-        applyBowlerPreset(s, inn);
+        setStandardField(s, inn);
         if (s.pending?.kind === 'bowler') s.pending = null;
       } else {
         inn.queuedBowlerId = action.playerId;
       }
       return { ok: true };
-    }
-    case 'field': {
-      if (!inn || inn.bowlingSide !== side) return { ok: false, error: 'Your side is not bowling.' };
-      if (action.positions.length !== 9) return { ok: false, error: 'A field needs exactly 9 outfielders.' };
-      for (const p of action.positions) if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return { ok: false, error: 'Invalid coordinates.' };
-      inn.field = {
-        templateId: action.templateId ?? null,
-        name: action.name ?? 'Custom field',
-        positions: action.positions.map((p) => ({ x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10 })),
-        keeperUp: action.keeperUp,
-      };
-      inn.fieldOverridePhase = phaseOf(inn, s.setup.rules.powerplayOvers, s.setup.rules.overs);
-      const v = validateField(inn.field.positions, 'R', {
-        powerplay: inn.fieldOverridePhase === 'powerplay' && !inn.superOver,
-        maxOutsidePP: s.setup.rules.maxOutsidePP,
-        maxOutside: s.setup.rules.maxOutside,
-        venue: s.setup.venue,
-      });
-      return { ok: true, warnings: [...v.errors.map((e) => `ILLEGAL: ${e} Deliveries will be called no-ball until fixed.`), ...v.warnings] };
     }
     case 'plan': {
       if (!inn || inn.bowlingSide !== side) return { ok: false, error: 'Your side is not bowling.' };
@@ -284,26 +272,6 @@ function applyActionInner(s: MatchState, side: Side, action: MatchAction, inn: I
     case 'auto': {
       if (s.setup.userSide !== side) return { ok: false, error: 'Automation settings apply to your own side.' };
       s.auto = { ...(s.auto ?? {}), [side]: { ...autoFor(s, side), ...action.settings } };
-      return { ok: true };
-    }
-    case 'save-field': {
-      if (!inn || inn.bowlingSide !== side) return { ok: false, error: 'Your side is not bowling.' };
-      const name = action.name.trim().slice(0, 40);
-      if (!name) return { ok: false, error: 'Give the field a name.' };
-      const t = team(s, side);
-      const id = `match-${t.fields.filter((f) => f.id.startsWith('match-')).length + 1}`;
-      t.fields.push({ id, name, positions: inn.field.positions.map((p) => ({ ...p })), keeperUp: inn.field.keeperUp, builtIn: false });
-      inn.field = { ...inn.field, templateId: id, name };
-      return { ok: true };
-    }
-    case 'bowler-field': {
-      const t = team(s, side);
-      if (!t.xi.some((p) => p.id === action.bowlerId)) return { ok: false, error: 'That bowler is not in your XI.' };
-      if (action.templateId && !t.fields.some((f) => f.id === action.templateId)) return { ok: false, error: 'Unknown field preset.' };
-      const cur = { ...(s.fieldByBowler?.[side] ?? {}) };
-      if (action.templateId) cur[action.bowlerId] = action.templateId;
-      else delete cur[action.bowlerId];
-      s.fieldByBowler = { ...(s.fieldByBowler ?? {}), [side]: cur };
       return { ok: true };
     }
     case 'phase-intent': {
@@ -348,9 +316,15 @@ function applyActionInner(s: MatchState, side: Side, action: MatchAction, inn: I
       inn.order = [...batted, ...proposed];
       return { ok: true };
     }
-    case 'mirror': {
-      if (!inn || inn.bowlingSide !== side) return { ok: false, error: 'Your side is not bowling.' };
-      inn.mirror = action.value;
+    case 'openers': {
+      if (!inn || inn.battingSide !== side) return { ok: false, error: 'Your side is not batting.' };
+      if (inn.legalBalls > 0 || Object.values(inn.batters).some((b) => b.balls > 0 || b.out)) return { ok: false, error: 'The openers are already out in the middle.' };
+      const ids = [action.strikerId, action.nonStrikerId];
+      if (ids[0] === ids[1] || !ids.every((id) => team(s, side).xi.some((p) => p.id === id))) return { ok: false, error: 'Pick two different players from your XI.' };
+      inn.order = [...ids, ...inn.order.filter((id) => !ids.includes(id))];
+      inn.batters = { [ids[0]]: emptyBatter(ids[0], 0), [ids[1]]: emptyBatter(ids[1], 0) };
+      inn.strikerId = ids[0];
+      inn.nonStrikerId = ids[1];
       return { ok: true };
     }
     case 'review': {
@@ -459,11 +433,9 @@ function startOver(s: MatchState, inn: InningsState, ctl: Controllers, captain: 
     const eligible = eligibleBowlers(s, inn);
     const auto = autoFor(s, side);
     if (ctl[side] === 'manual' && !auto.bowler) {
-      autoPhaseField(s, inn);
-      if (auto.field || auto.plan) {
+      if (auto.plan) {
         const adj = captain.overStart(s, side);
-        if (auto.field && adj.field) inn.field = adj.field;
-        if (auto.plan && adj.plan) inn.plan = adj.plan;
+        if (adj.plan) inn.plan = adj.plan;
       }
       if (inn.queuedBowlerId && eligible.includes(inn.queuedBowlerId)) {
         inn.currentBowlerId = inn.queuedBowlerId;
@@ -476,17 +448,14 @@ function startOver(s: MatchState, inn: InningsState, ctl: Controllers, captain: 
       }
     } else {
       const manual = ctl[side] === 'manual';
-      if (manual) autoPhaseField(s, inn);
       inn.currentBowlerId = inn.queuedBowlerId && eligible.includes(inn.queuedBowlerId) && manual ? inn.queuedBowlerId : captain.chooseBowler(s, side);
       inn.queuedBowlerId = null;
       const adj = captain.overStart(s, side);
       // Automation never overrides a manual decision: for the user's side only automated areas change.
-      if (adj.field && (!manual || auto.field)) inn.field = adj.field;
       if (adj.plan && (!manual || auto.plan)) inn.plan = adj.plan;
-      if (adj.mirror !== undefined && !manual) inn.mirror = adj.mirror;
     }
     inn.bowlers[inn.currentBowlerId!] ??= emptyBowler(inn.currentBowlerId!);
-    if (ctl[side] === 'manual' && !auto.field) applyBowlerPreset(s, inn);
+    setStandardField(s, inn);
   }
   return null;
 }
@@ -538,14 +507,6 @@ function resolveReview(s: MatchState, inn: InningsState, by: 'batting' | 'bowlin
   finalize(s, inn, ev, s.lastCtl ?? { home: 'ai', away: 'ai' }, null);
 }
 
-/** A bowler-specific field preset replaces the field when that bowler starts an over. */
-function applyBowlerPreset(s: MatchState, inn: InningsState) {
-  const id = inn.currentBowlerId && s.fieldByBowler?.[inn.bowlingSide]?.[inn.currentBowlerId];
-  if (!id || !team(s, inn.bowlingSide).fields.some((f) => f.id === id)) return;
-  inn.field = fieldFromTemplate(s, inn.bowlingSide, id);
-  inn.fieldOverridePhase = phaseOf(inn, s.setup.rules.powerplayOvers, s.setup.rules.overs);
-}
-
 function resolveToss(s: MatchState, caller: Side, call: 'heads' | 'tails') {
   const rng = new Rng(s.rng);
   const coin = rng.chance(0.5) ? 'heads' : 'tails';
@@ -554,14 +515,6 @@ function resolveToss(s: MatchState, caller: Side, call: 'heads' | 'tails') {
   s.toss.call = call;
   s.toss.coin = coin;
   s.toss.winner = call === coin ? caller : other(caller);
-}
-
-function autoPhaseField(s: MatchState, inn: InningsState) {
-  const phase = phaseOf(inn, s.setup.rules.powerplayOvers, s.setup.rules.overs);
-  if (inn.fieldOverridePhase === phase) return;
-  const tmpl = team(s, inn.bowlingSide).tactics.fieldTemplateByPhase[phase];
-  if (inn.field.templateId !== tmpl) inn.field = fieldFromTemplate(s, inn.bowlingSide, tmpl);
-  inn.fieldOverridePhase = phase;
 }
 
 // ------------------------------------------------------------------ delivery resolution
@@ -609,6 +562,25 @@ export function fieldAssignment(s: MatchState, inn: InningsState, bowlerId: stri
   const bowler = bowlerId ?? inn.currentBowlerId ?? inn.queuedBowlerId ?? inn.lastOverBowlerId ?? t.xi.find((p) => p.id !== t.keeperId && p.bowlType !== 'NONE')!.id;
   const fielders = assignFielders(s, inn, inn.field.positions, bowler);
   return fielders.filter((f) => !f.keeper && !f.bowler).map((f) => ({ index: inn.field.positions.indexOf(f.pos), playerId: f.id }));
+}
+
+/**
+ * Where every fielding player stood for a recorded delivery: the standard field for that
+ * ball's phase, mirrored for a left-hander, fitted to the venue and assigned exactly as the
+ * engine assigned it. Presentation only — it reads the record, it never changes it.
+ */
+export function fieldForDelivery(s: MatchState, ev: DeliveryEvent): { id: string; x: number; y: number; role: 'fielder' | 'keeper' | 'bowler' }[] {
+  const inn = s.innings[ev.innings];
+  if (!inn) return [];
+  const rules = s.setup.rules;
+  const phase = inn.superOver ? 'death' : ev.over < rules.powerplayOvers ? 'powerplay' : ev.over >= rules.overs - 5 ? 'death' : 'middle';
+  const t = BUILT_IN_FIELDS.find((f) => f.id === STANDARD_FIELD[phase])!;
+  const striker = playerById(s, ev.strikerId);
+  const bowler = playerById(s, ev.bowlerId);
+  const raw = inn.mirror && striker.batHand === 'L' ? t.positions.map(mirror) : t.positions;
+  const positions = fitToVenue(raw, s.setup.venue);
+  const view = { ...inn, field: { ...inn.field, keeperUp: isSpin(bowler.bowlType) } };
+  return assignFielders(s, view, positions, bowler.id).map((f) => ({ id: f.id, x: f.pos.x, y: f.pos.y, role: f.keeper ? 'keeper' : f.bowler ? 'bowler' : 'fielder' }));
 }
 
 function mkFielder(p: MatchPlayer, pos: FieldPoint, keeper: boolean, bowler: boolean): Fielder {
@@ -854,6 +826,29 @@ function gapScore(angle: number, aerial: boolean, hand: 'R' | 'L', fielders: Fie
   return clamp(minSep / 22, 0, 1);
 }
 
+/**
+ * The standard of this match: the average hitting power of both top orders and the average
+ * control of both attacks. The physical scale (how far the ball carries, how often bowlers
+ * land it) is judged partly against it, so every league plays like T20 at its own level while
+ * better players still out-hit and out-bowl weaker ones within a match.
+ */
+const levels = new WeakMap<MatchSetup, { power: number; control: number }>();
+function matchLevel(s: MatchState): { power: number; control: number } {
+  let l = levels.get(s.setup);
+  if (!l) {
+    const pw: number[] = [];
+    const ct: number[] = [];
+    for (const t of [s.setup.home, s.setup.away]) {
+      for (const p of t.xi.slice(0, 7)) pw.push(p.attrs.bat.power);
+      for (const p of t.xi.filter((x) => x.bowlType !== 'NONE').sort((a, b) => b.attrs.bowl.control - a.attrs.bowl.control).slice(0, 5)) ct.push(p.attrs.bowl.control);
+    }
+    const mean = (xs: number[], d: number) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : d);
+    l = { power: mean(pw, SIM.powerAnchor), control: mean(ct, SIM.controlAnchor) };
+    levels.set(s.setup, l);
+  }
+  return l;
+}
+
 function deliver(
   s: MatchState, inn: InningsState, ctl: Controllers, captain: Captain, rng: Rng,
 ): { ev: DeliveryEvent; lbw: Appeal | null } {
@@ -904,6 +899,9 @@ function deliver(
   const batPress = batterPressure(s, inn, striker);
   const bowlerDay = s.dayForm?.[bowler.id] ?? 0;
   control += bowlPress.controlAdj + bowlerDay * 0.6 + rng.normal(0, 2);
+  const level = matchLevel(s);
+  // Accuracy (execution, wides, no-balls) on the match's own scale; skill contests use raw control.
+  const execControl = control + (SIM.controlAnchor - level.control) * SIM.levelAnchoring;
 
   // ----- intended delivery
   const plan = inn.planByBatter?.[striker.id] ?? inn.plan;
@@ -913,7 +911,7 @@ function deliver(
   let variation: string | null = null;
   if (useVariation) variation = rng.pick(spin ? VARIATIONS[bowler.bowlType] ?? ['quicker one'] : VARIATIONS.pace);
 
-  let pExec = SIM.executionBase + control * SIM.executionPerControl;
+  let pExec = SIM.executionBase + execControl * SIM.executionPerControl;
   if (length === 'yorker') pExec *= 0.62 + bowler.attrs.bowl.yorker * 0.0036;
   if (variation) pExec *= 0.88 + bowler.attrs.bowl.variation * 0.0012;
   pExec = clamp(pExec, 0.35, 0.97);
@@ -922,7 +920,7 @@ function deliver(
   let quality: DeliveryEvent['quality'];
   if (rng.chance(pExec)) {
     quality = 'executed';
-    e = 0.08 + (control - 60) / 220;
+    e = 0.08 + (execControl - 60) / 220;
     if (length === 'yorker') e += 0.18 + bowler.attrs.bowl.yorker / 600;
     if (variation) e += 0.1 + bowler.attrs.bowl.variation / 500;
     if (plan.pace === 'slower' && !spin) e += bowler.attrs.bowl.slower / 900;
@@ -947,7 +945,7 @@ function deliver(
   // ----- extras
   const seq = ++s.seq;
   const overBefore = Math.floor(inn.legalBalls / 6);
-  const pWide = SIM.wideBase + Math.max(0, 100 - control) * SIM.widePerControlDeficit + (line === 'wide' ? 0.035 : 0) + (line === 'leg' ? 0.02 : 0) + (length === 'yorker' ? 0.008 : 0) + (spin ? -0.008 : 0) + (dewNow ? 0.006 : 0) + (length === 'short' && !spin ? 0.01 : 0);
+  const pWide = SIM.wideBase + Math.max(0, 100 - execControl) * SIM.widePerControlDeficit + (line === 'wide' ? 0.035 : 0) + (line === 'leg' ? 0.02 : 0) + (length === 'yorker' ? 0.008 : 0) + (spin ? -0.008 : 0) + (dewNow ? 0.006 : 0) + (length === 'short' && !spin ? 0.01 : 0);
   const base: Omit<DeliveryEvent, 'commentary' | 'scoreAfter' | 'winProbHome'> = {
     seq, innings: inn.index, over: overBefore, ball: (inn.legalBalls % 6) + 1, legal: true,
     bowlerId: bowler.id, strikerId: striker.id, nonStrikerId: nonStriker.id,
@@ -964,7 +962,7 @@ function deliver(
     (ev as DeliveryEvent).why = [control < 60 ? `Wide: ${bowler.shortName}'s control is down (${Math.round(control)})` : `Wide: strayed ${line === 'leg' ? 'down leg' : 'outside off'} from a ${line} line plan`];
     return { ev: ev as DeliveryEvent, lbw: null };
   }
-  const noBall = !legality.legal || rng.chance(SIM.noBallBase + Math.max(0, 100 - control) * SIM.noBallPerControlDeficit);
+  const noBall = !legality.legal || rng.chance(SIM.noBallBase + Math.max(0, 100 - execControl) * SIM.noBallPerControlDeficit);
   if (!legality.legal) base.umpireNote = `No-ball: illegal field (${legality.errors[0]})`;
   if (noBall) {
     base.legal = false;
@@ -1001,6 +999,9 @@ function deliver(
     const ls = sh.lengths[length] ?? -0.8;
     const li = sh.lines[line] ?? -0.5;
     let w = Math.exp(SIM.lengthSuitWeight * ls + SIM.lineSuitWeight * li - SIM.intentSharpness * (intent - sh.intent) ** 2);
+    // Batters read the ball: a well-executed delivery is respected (defended or worked away)
+    // rather than attacked. The more attacking the shot, the more the read matters.
+    if (e > 0) w *= Math.exp(-SIM.respectWeight * e * sh.intent * (1.15 - intent));
     if (sh.id !== 'leave' && sh.id !== 'defend') {
       const g = gapScore(shotAngle(sh, line), sh.aerial >= 0.5, hand, fielders);
       w *= 1 + iq * (sh.aerial >= 0.5 ? 0.6 : 1.1) * (g - 0.45);
@@ -1144,7 +1145,7 @@ function deliver(
   let angle = shotAngle(shot, line) + rng.normal(0, shot.sd * (q < 0.33 ? 1.7 : 1));
   if (shot.id === 'defend') angle = rng.normal(0, 55);
   const aerial = shot.aerial >= 1 || rng.chance(clamp(shot.aerial + (q < 0.33 ? 0.22 : 0) + intent * 0.06, 0, 1));
-  const power = striker.attrs.bat.power;
+  const power = striker.attrs.bat.power + (SIM.powerAnchor - level.power) * SIM.levelAnchoring;
   const alt = 1 + venue.altitude / 9000;
   const paceOn = spin ? 0 : (speed - 115) * 0.04;
   let res: FieldOutcome;
@@ -1288,6 +1289,7 @@ function finalize(s: MatchState, inn: InningsState, ev: DeliveryEvent, ctl: Cont
   }
   ev.winProbHome = winProbabilityHome(s);
   ev.commentary = commentaryFor(s, ev);
+  if (s.status === 'complete' && s.result && !s.result.playerOfMatch) s.result.playerOfMatch = playerOfMatch(s);
 }
 
 type Appeal = { kind: 'lbw' | 'caught-behind'; trueOut: boolean; umpireOut: boolean; belief: number; keeperId: string | null };
@@ -1439,8 +1441,8 @@ function finishMatch(s: MatchState, winner: Side | null, last: InningsState, not
     margin = `won by ${r} run${r === 1 ? '' : 's'}`;
   }
   s.status = 'complete';
+  // The award is decided once the final ball is fully recorded (see the end of finalize).
   s.result = { winner, margin, superOver, playerOfMatch: null };
-  s.result.playerOfMatch = playerOfMatch(s);
 }
 
 /** Player of the Match from the configurable contribution model (see award.ts). */

@@ -6,6 +6,7 @@ import type { MatchState } from '@kurciv/simulation';
 import { categoryOf, roleTargets } from './auction';
 import { finishingOrder, sortRows } from './competition';
 import { nextId, squadOf } from './util';
+import { mirrorStory } from './clubworld/inbox';
 
 /**
  * Narrative layer. Every story and timeline entry is produced by a concrete game event and
@@ -30,6 +31,7 @@ function addStory(w: WorldState, key: string, s: Omit<Story, 'id' | 'season' | '
   w.storyKeys[key] = w.season;
   const story: Story = { ...s, id: nextId(w, 'st'), season: w.season, day: w.day, status: 'active' };
   w.stories.unshift(story);
+  mirrorStory(w, story);
   // Keep the desk tidy: at most 8 open stories; old ones quietly resolve.
   const active = w.stories.filter((x) => x.status === 'active');
   for (const old of active.slice(8)) old.status = 'resolved';
@@ -366,6 +368,7 @@ export function applyStoryAction(
   if (err) return { ok: false, error: err };
   story.status = 'resolved';
   story.resolution = a.label;
+  for (const m of w.clubWorld?.inbox ?? []) if (m.storyId === story.id && m.response && !m.response.chosen) Object.assign(m.response, { chosen: String(actionIndex), outcome: a.label }), (m.read = true);
   return { ok: true };
 }
 

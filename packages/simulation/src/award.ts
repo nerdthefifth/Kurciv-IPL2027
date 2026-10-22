@@ -45,7 +45,7 @@ export const DEFAULT_AWARD_WEIGHTS: AwardWeights = {
   runOut: 9,
   droppedCatch: -5,
   winImpact: 55,
-  winningSide: 10,
+  winningSide: 30,
 };
 
 export interface Contribution {
@@ -104,8 +104,10 @@ export function contributions(s: MatchState, weights: AwardWeights = DEFAULT_AWA
   let prev = 0.5;
   for (const d of s.deliveries) {
     const inn = s.innings[d.innings];
-    const delta = d.winProbHome - prev;
-    prev = d.winProbHome;
+    // A delivery without a recorded probability (should not happen) contributes nothing.
+    const wp = Number.isFinite(d.winProbHome) ? d.winProbHome : prev;
+    const delta = wp - prev;
+    prev = wp;
     if (!inn || inn.superOver) continue;
     const forBatting = inn.battingSide === 'home' ? delta : -delta;
     get(d.strikerId).winAdded += forBatting;

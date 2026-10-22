@@ -113,7 +113,7 @@ describe('incoming batter', () => {
 });
 
 describe('automation toggles', () => {
-  it('bowler prompts only when bowler selection is manual; manual fields are not overridden', () => {
+  it('bowler prompts only when bowler selection is manual', () => {
     const count = (auto: boolean) => {
       const s = createMatch(setup('auto', 'home'), 'auto-seed');
       applyAction(s, 'home', { type: 'auto', settings: { bowler: auto } });
@@ -127,22 +127,16 @@ describe('automation toggles', () => {
     };
     expect(count(false)).toBeGreaterThan(10);
     expect(count(true)).toBe(0);
+  });
 
-    const s = createMatch(setup('field', 'home'), 'field-seed');
-    const d = defaults('home');
-    let checked = false;
-    play(s, HOME, (st, n) => {
-      d(st, n);
-      const inn = st.innings[st.innings.length - 1];
-      if (n.kind === 'bowler' && inn?.bowlingSide === 'home' && inn.legalBalls === 6 && !checked) {
-        const custom = inn.field.positions.map((p) => ({ x: p.x * 0.9, y: p.y * 0.9 }));
-        applyAction(st, 'home', { type: 'field', positions: custom, keeperUp: false, name: 'My field' });
-        step(st, HOME, AiCaptain);
-        expect(inn.field.name).toBe('My field');
-        checked = true;
-      }
-    });
-    expect(checked).toBe(true);
+  it('manual bowlers with automatic plans: bowling first never asks for a plan before a bowler exists', () => {
+    // Regression: the matchday screen sets these; the AI winning the toss and batting made the engine throw.
+    for (let k = 0; k < 6; k++) {
+      const s = createMatch(setup(`plan-auto-${k}`, 'home'), `plan-auto-${k}`);
+      applyAction(s, 'home', { type: 'auto', settings: { bowler: false, batter: false, plan: true } });
+      expect(() => play(s, HOME, defaults('home'))).not.toThrow();
+      checkScorecard(s);
+    }
   });
 });
 

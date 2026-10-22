@@ -7,7 +7,7 @@ import type { MatchState } from '@kurciv/simulation';
 import { advanceCascade, setupAuctions } from './auction';
 import { createLeagueCompetition, finishingOrder, lastLeagueDay, maybeCompleteCompetition, maybeCreatePlayoffs, resolveRefs, sortRows } from './competition';
 import { developPlayer, recoverDay, retirementChance } from './condition';
-import { COUNTRY_DEPTH } from './create';
+import { depthOf } from './create';
 import { recordTransaction, seasonStartFinances } from './finance';
 import { applyMatch, buildMatchSetup, matchSeed } from './matchday';
 import { addNews, clamp, clubsInLeague, nextId, round2, squadOf, worldRng } from './util';
@@ -15,6 +15,9 @@ import { aiInjuryCover } from './transfers';
 import { allocateForWorld, createWCC, progressWCC, updateReputations } from './wcc';
 import { roleDemand } from './auction-live';
 import { addTimeline, buildChronicle, storiesDaily, storyAuctionEve } from './story';
+import { boardOf, boardSeasonReview, dismissalThreshold } from './clubworld/board';
+import { clubWorldSync } from './clubworld/sync';
+import { ensureCaptaincy } from './captaincy';
 import { pruneImpacts } from './impact';
 
 export interface MatchRecord {
@@ -74,6 +77,7 @@ export function startSeason(w: WorldState): string[] {
     }
   }
   seasonStartFinances(w);
+  ensureCaptaincy(w);
   w.phase = 'season';
   w.day = Math.min(...LEAGUES.map((l) => l.seasonStartDay)) - 1;
   addTimeline(w, 'season', `The ${w.season} season begins`, w.clubs[w.userClubId].board.objectives.map((o) => o.description).join(' '));
@@ -136,6 +140,7 @@ function endOfDay(w: WorldState) {
       seasonAwards(w);
     }
   }
+  clubWorldSync(w);
   w.day++;
 }
 
@@ -293,6 +298,7 @@ export function endSeason(w: WorldState) {
 
   updateReputations(w);
   for (const c of Object.values(w.clubs)) evaluateBoard(w, c);
+  boardSeasonReview(w);
   w.chronicles.push(buildChronicle(w));
   addTimeline(w, 'season', `${w.season} season complete`, w.chronicles[w.chronicles.length - 1].summary);
 
@@ -361,7 +367,7 @@ export function endSeason(w: WorldState) {
   replenishPools(w, rng);
 
   // Board consequences (never an immediate game-over: dismissal moves you to a new club)
-  if (user.board.warnings >= 2 && user.board.confidence < 15) sackAndReassign(w);
+  if (user.board.warnings >= 2 && user.board.confidence < dismissalThreshold(boardOf(w, user))) sackAndReassign(w);
 
   // Next season
   w.season += 1;
@@ -392,7 +398,7 @@ function youthIntake(w: WorldState, c: Club, rng: ReturnType<typeof worldRng>) {
     if (c.academy.length >= WORLD.youth.academyMax) break;
     const country = l.domesticCountries[0];
     const elite = rng.chance(WORLD.youth.eliteChance * (0.6 + c.facilities.youth * 0.15));
-    const quality = COUNTRY_DEPTH[country] - 12 + c.facilities.youth * 1.2 + (elite ? 8 : 0);
+    const quality = depthOf(country) - 12 + c.facilities.youth * 1.2 + (elite ? 8 : 0);
     const p = generatePlayer(rng, { country, quality, age: rng.int(16, 19), season: w.season + 1, source: 'youth', idPrefix: `y${w.season}` }, w.counter++);
     p.isYouth = true;
     p.potential = Math.min(96, Math.round(p.potential + (elite ? rng.range(14, 22) : rng.range(4, 14)) + c.facilities.youth));
@@ -410,7 +416,7 @@ function replenishPools(w: WorldState, rng: ReturnType<typeof worldRng>) {
     const active = Object.values(w.players).filter((p) => p.country === country && !p.retired && !p.isYouth).length;
     const need = clubsInLeague(w, l.id).length * l.squadRules.maxSquad * 1.4;
     for (let i = active; i < need; i++) {
-      const p = generatePlayer(rng, { country, quality: COUNTRY_DEPTH[country], age: rng.int(19, 24), season: w.season + 1, idPrefix: `g${w.season}` }, w.counter++);
+      const p = generatePlayer(rng, { country, quality: depthOf(country), age: rng.int(19, 24), season: w.season + 1, idPrefix: `g${w.season}` }, w.counter++);
       w.players[p.id] = p;
     }
   }

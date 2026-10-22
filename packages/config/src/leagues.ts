@@ -1,3 +1,4 @@
+import { COUNTRIES } from '@kurciv/domain';
 import type { AuctionPersonality, CountryCode, LeagueConfig, SquadRules, AuctionRules } from '@kurciv/domain';
 
 /**
@@ -240,11 +241,7 @@ export function leagueById(id: string): LeagueConfig {
   return l;
 }
 
-export const COUNTRY_NAMES: Record<CountryCode, string> = {
-  IND: 'India', AUS: 'Australia', ENG: 'England', PAK: 'Pakistan', SA: 'South Africa', NZ: 'New Zealand', SL: 'Sri Lanka',
-  BAN: 'Bangladesh', WI: 'West Indies', AFG: 'Afghanistan', IRE: 'Ireland', ZIM: 'Zimbabwe', NED: 'Netherlands', SCO: 'Scotland',
-  USA: 'USA', NEP: 'Nepal', UAE: 'UAE', NAM: 'Namibia', OMA: 'Oman', CAN: 'Canada',
-};
+export const COUNTRY_NAMES: Record<CountryCode, string> = Object.fromEntries(COUNTRIES.map((c) => [c.code, c.name])) as Record<CountryCode, string>;
 
 /**
  * Export restrictions: players from these countries may only be registered in the listed

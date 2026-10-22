@@ -5,7 +5,7 @@
  * first innings, ~6.5 wickets, ~36% dot balls, ~1 boundary every 6 balls.
  */
 export const SIM = {
-  engineVersion: 'kurciv-t20-1.1.0',
+  engineVersion: 'kurciv-t20-1.3.0',
 
   // --- geometry (metres)
   strikerY: -8.8,
@@ -32,7 +32,7 @@ export const SIM = {
   stumpBreakTime: 0.35,
 
   // --- running between wickets
-  firstRunBase: 3.1,
+  firstRunBase: 3.17,
   firstRunPerRotation: 0.004,
   nextRunBase: 3.3,
   nextRunPerRotation: 0.004,
@@ -52,32 +52,38 @@ export const SIM = {
   noBallPerControlDeficit: 0.00008,
 
   // --- contact model
-  missBias: -3.25,
+  missBias: -2.6,
   missRisk: 2.3,
   missSkill: 0.48,
   missSuit: 0.75,
   missDelivery: 1.05,
   missMovement: 0.65,
-  edgeBias: -3.4,
+  edgeBias: -2.9,
   edgeRisk: 1.3,
   edgeSkill: 0.4,
   edgeMovement: 0.8,
-  qualityMean: 0.585,
+  qualityMean: 0.6,
   qualitySkill: 0.065,
   qualitySuit: 0.13,
   qualityDelivery: 0.13,
   qualityRisk: 0.16,
   qualitySd: 0.2,
-  intentSharpness: 16,
+  intentSharpness: 12,
+  /** Reference standard of a match (top-order power, attack control) and how far the physical scale is anchored to it (0 = absolute ratings, 1 = fully relative). */
+  powerAnchor: 75,
+  controlAnchor: 72,
+  levelAnchoring: 0.75,
+  /** How strongly batters respect a well-executed ball (shot selection). */
+  respectWeight: 14,
   lengthSuitWeight: 1.6,
   lineSuitWeight: 1.0,
 
   // --- ball flight
-  carryBase: 31,
-  carryPerPower: 0.63,
-  carryQualityFloor: 0.34,
-  carryQualityGain: 0.76,
-  groundSpeedBase: 11.5,
+  carryBase: 40,
+  carryPerPower: 0.5,
+  carryQualityFloor: 0.29,
+  carryQualityGain: 0.79,
+  groundSpeedBase: 16,
   groundSpeedPerPower: 0.22,
   groundQualityFloor: 0.45,
   groundQualityGain: 0.72,
@@ -90,7 +96,7 @@ export const SIM = {
   umpireFalseOutRate: 0.025,
   /** Chance a beaten ball outside off, taken by the keeper, is wrongly given caught behind. */
   umpireFalseCaughtBehindRate: 0.006,
-  catchBase: 0.5,
+  catchBase: 0.6,
   catchPerSkill: 0.0045,
   catchSlackBonus: 0.12,
   boundaryCatchPenalty: 0.2,

@@ -20,6 +20,8 @@ export interface MatchPlayer {
   fatigue: number;
   morale: number;
   tags: string[];
+  /** Where the player record comes from (curated players have licensed photos). */
+  source?: string;
 }
 
 export interface TeamSetup {
@@ -197,13 +199,12 @@ export type RunningStyle = 'conservative' | 'balanced' | 'aggressive';
 export interface AutoSettings {
   bowler: boolean;
   batter: boolean;
-  field: boolean;
   approach: boolean;
   plan: boolean;
   reviews: boolean;
 }
 
-export const DEFAULT_AUTO: AutoSettings = { bowler: false, batter: true, field: false, approach: false, plan: false, reviews: false };
+export const DEFAULT_AUTO: AutoSettings = { bowler: false, batter: true, approach: false, plan: false, reviews: false };
 
 export interface OverSummary {
   innings: number;
@@ -280,17 +281,14 @@ export type MatchAction =
   | { type: 'batter'; playerId: string }
   | { type: 'auto'; settings: Partial<AutoSettings> }
   | { type: 'running'; value: RunningStyle }
-  | { type: 'bowler-field'; bowlerId: string; templateId: string | null }
-  | { type: 'save-field'; name: string }
   | { type: 'phase-intent'; phase: 'powerplay' | 'middle' | 'death'; value: number }
   | { type: 'batter-plan'; batterId: string; vsPace: number | null; vsSpin: number | null }
   | { type: 'bowler'; playerId: string }
-  | { type: 'field'; positions: FieldPoint[]; keeperUp: boolean; templateId?: string | null; name?: string }
   | { type: 'plan'; plan: BowlingPlan; batterId?: string | null }
   | { type: 'intent'; value: number | null; batterId?: string }
   | { type: 'order'; order: string[] }
   | { type: 'review'; review: boolean }
-  | { type: 'mirror'; value: boolean };
+  | { type: 'openers'; strikerId: string; nonStrikerId: string };
 
 export interface LoggedAction {
   seq: number; // delivery sequence number at the time of the action
@@ -313,8 +311,6 @@ export interface MatchState {
   /** Per-side automation and running style for sides the user controls. */
   auto?: Partial<Record<Side, AutoSettings>>;
   running?: Partial<Record<Side, RunningStyle>>;
-  /** Field preset (template id) to use whenever a given bowler starts an over, per side. */
-  fieldByBowler?: Partial<Record<Side, Record<string, string>>>;
   /** Controllers in force at the last step (used when a decision resolves outside a step). */
   lastCtl?: Controllers;
   seq: number;
@@ -343,7 +339,7 @@ export interface Controllers {
 export interface Captain {
   tossDecision(s: MatchState, side: Side): 'bat' | 'bowl';
   chooseBowler(s: MatchState, side: Side): string;
-  overStart(s: MatchState, side: Side): { field?: FieldSetting; plan?: BowlingPlan; mirror?: boolean };
+  overStart(s: MatchState, side: Side): { plan?: BowlingPlan };
   battingIntent(s: MatchState, side: Side, batterId: string): number;
   battingOrder(s: MatchState, side: Side): string[] | null;
   review(s: MatchState, side: Side, ev: DeliveryEvent, perceivedOut: number): boolean;

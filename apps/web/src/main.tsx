@@ -31,6 +31,8 @@ import { HistoryPage } from './pages/History';
 import { SettingsPage } from './pages/Settings';
 import { ClubPage } from './pages/Club';
 import { LabPage } from './pages/Lab';
+import { DatabasePage } from './pages/Database';
+import { BoardPage, ConversationsPage, FeedPage, InboxPage, NewsPage } from './pages/ClubWorld';
 
 function CareerRoutes() {
   const { cid } = useParams();
@@ -59,6 +61,12 @@ function CareerRoutes() {
             <Route path="settings" element={<SettingsPage />} />
             <Route path="club/:clubId" element={<ClubPage />} />
             <Route path="lab" element={<LabPage />} />
+            <Route path="database" element={<DatabasePage />} />
+            <Route path="inbox" element={<InboxPage />} />
+            <Route path="conversations" element={<ConversationsPage />} />
+            <Route path="board" element={<BoardPage />} />
+            <Route path="news" element={<NewsPage />} />
+            <Route path="feed" element={<FeedPage />} />
             <Route path="*" element={<Navigate to="" replace />} />
           </Routes>
         </Shell>

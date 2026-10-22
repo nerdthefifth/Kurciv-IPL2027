@@ -512,7 +512,8 @@ export function fastForward(w: WorldState, a: AuctionState, mode: SkipMode): { s
         }
       }
     }
-    liveTick(w, a, 5000);
+    // Never step past a phase boundary, so every lot's introduction is seen (proxies, shortlist stops).
+    liveTick(w, a, Math.min(5000, Math.max(1, Math.ceil(live.phaseMs) + 1)));
   }
   for (const pid of assistantSet) delete a.userProxy[pid];
   return { stoppedAt, lots: a.currentLotIndex - startLot };

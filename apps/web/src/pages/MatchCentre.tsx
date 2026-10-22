@@ -1,15 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { FieldPoint } from '@kurciv/domain';
-import { ZONES } from '@kurciv/simulation';
-import { BOWL_LABEL, api, dayLabel, overs, useApi } from '../lib/api';
-import { useCareer, useToast } from '../lib/context';
-import { Async, Badge, Card, Confirm, Empty, Kbd, Meter, Modal, PageHeader, Slider, Tabs } from '../components/ui';
-import { FieldEditor } from '../components/FieldEditor';
-import { Manhattan, WinProb, Worm } from '../components/charts';
-import { Scorecard, ballChip, nameMap } from '../components/Scorecard';
+import { dayLabel, useApi } from '../lib/api';
+import { useCareer } from '../lib/context';
+import { Async, Badge, Card, Confirm, Empty, PageHeader } from '../components/ui';
 import { OvrChip, PlayerName } from '../components/player';
-import { PlanEditor } from './Tactics';
+import { MatchDay } from './match/MatchDay';
 
 export function MatchCentrePage() {
   const career = useCareer();
@@ -31,6 +26,10 @@ function PreMatch() {
   const pre = useApi<any>(fx ? `/careers/${career.id}/prematch/${fx.id}` : null, [career.tick, fx?.id]);
   const [quick, setQuick] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [picked, setPicked] = useState<string[] | null>(null);
+  useEffect(() => setPicked(null), [fx?.id]);
+  const xi: string[] = picked ?? pre.data?.userXI.map((p: any) => p.id) ?? [];
+  const check = pre.data ? checkXI(xi, pre.data.squad, pre.data.maxOverseas) : null;
   if (!o) return null;
   if (!fx) {
     return (
@@ -42,7 +41,7 @@ function PreMatch() {
   }
   const start = async () => {
     setBusy(true);
-    const r = await career.mutate('/match/start', { fixtureId: fx.id });
+    const r = await career.mutate('/match/start', { fixtureId: fx.id, xi });
     setBusy(false);
     if (r) career.refresh();
   };
@@ -61,8 +60,8 @@ function PreMatch() {
                 <div className="flex flex-wrap gap-2">
                   {p.today ? (
                     <>
-                      <button className="btn-primary" disabled={busy} onClick={start}>▶ Play live</button>
-                      <button className="btn-ghost" disabled={busy} onClick={() => setQuick(true)}>Quick simulate</button>
+                      <button className="btn-primary" disabled={busy || !check?.ok} title={check?.ok ? undefined : 'Fix your XI first'} onClick={start}>▶ Play live</button>
+                      <button className="btn-ghost" disabled={busy || !check?.ok} onClick={() => setQuick(true)}>Quick simulate</button>
                     </>
                   ) : (
                     <Badge tone="info">Advance to match day ({dayLabel(o.season, fx.day)}) with Continue</Badge>
@@ -96,12 +95,10 @@ function PreMatch() {
               </Card>
             </div>
             <div className="grid gap-5 md:grid-cols-2">
-              <Card title={`Your XI${p.lineupSaved ? ' (saved lineup)' : ' (assistant’s pick)'}`} actions={<Link to={`/c/${career.id}/squad`} className="text-xs text-lime">Change</Link>}>
-                {p.userXINote && <p className="mb-2 text-xs text-warn">{p.userXINote}</p>}
-                <XIList players={p.userXI} />
-              </Card>
-              <Card title={`${p.opponent.name} — predicted XI`}>
+              <XISelector pre={p} xi={xi} check={check!} onChange={setPicked} />
+              <Card title={`${p.opponent.name} — their XI`}>
                 <XIList players={p.opponentXI} />
+                <SelectorNotes title="Their selector’s notes" notes={p.opponentReasons} />
               </Card>
             </div>
           </div>
@@ -110,15 +107,120 @@ function PreMatch() {
       <Confirm
         open={quick}
         title="Quick simulate?"
-        body="The full ball-by-ball engine plays the match instantly, with your assistant making decisions from your saved XI and tactics. You can review the full scorecard afterwards."
+        body="The full ball-by-ball engine plays the match instantly, with the XI you selected, and your assistant makes in-match decisions from your tactics. You can review the full scorecard afterwards."
         confirmLabel="Simulate"
         onClose={() => setQuick(false)}
         onConfirm={async () => {
-          const r = await career.mutate<any>('/match/quick', { fixtureId: fx.id }, { success: 'Match simulated.' });
+          const r = await career.mutate<any>('/match/quick', { fixtureId: fx.id, xi }, { success: 'Match simulated.' });
           if (r?.fixture) nav(`/c/${career.id}/fixtures/${r.fixture.id}`);
         }}
       />
     </div>
+  );
+}
+
+type XICheck = { ok: boolean; errors: string[]; warnings: string[]; overseas: number; bowlers: number; keeper: boolean };
+
+/** Mirrors the server's validateXI so the user sees problems before pressing Play. */
+function checkXI(ids: string[], squad: any[], maxOverseas: number): XICheck {
+  const xi = ids.map((id) => squad.find((p) => p.id === id)).filter(Boolean);
+  const overseas = xi.filter((p) => p.overseas).length;
+  const bowlers = xi.filter((p) => p.canBowl).length;
+  const keeper = xi.some((p) => p.keeper);
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  if (xi.length !== 11) errors.push(`Pick exactly 11 players (${xi.length} selected).`);
+  if (overseas > maxOverseas) errors.push(`Too many overseas players (${overseas}/${maxOverseas}).`);
+  if (bowlers < 5) errors.push(`Need at least 5 bowling options (${bowlers}).`);
+  for (const p of xi) if (p.injury) errors.push(`${p.name} is injured.`);
+  if (!keeper) warnings.push('No specialist wicketkeeper — keeping will suffer.');
+  if (xi.some((p) => p.fatigue > 75)) warnings.push('Someone in the XI is heavily fatigued.');
+  return { ok: errors.length === 0, errors, warnings, overseas, bowlers, keeper };
+}
+
+function SelectorNotes({ title, notes }: { title: string; notes: string[] }) {
+  if (!notes?.length) return null;
+  return (
+    <div className="mt-3 border-t border-obsidian-700 pt-2">
+      <div className="label">{title}</div>
+      <ul className="mt-1 space-y-0.5 text-xs text-ink-muted">{notes.map((n) => <li key={n}>{n}</li>)}</ul>
+    </div>
+  );
+}
+
+/** Pick the starting XI and batting order for this match. */
+function XISelector({ pre, xi, check, onChange }: { pre: any; xi: string[]; check: XICheck; onChange: (ids: string[]) => void }) {
+  const career = useCareer();
+  const byId = useMemo(() => new Map<string, any>(pre.squad.map((p: any) => [p.id, p])), [pre.squad]);
+  const bench = pre.squad.filter((p: any) => !xi.includes(p.id)).sort((a: any, b: any) => b.ovr - a.ovr);
+  const move = (i: number, d: number) => {
+    const j = i + d;
+    if (j < 0 || j >= xi.length) return;
+    const next = [...xi];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  const isAssistant = xi.length === pre.suggestedXI.length && xi.every((id, i) => id === pre.suggestedXI[i]);
+  const tag = (p: any) => [p.role, p.overseas ? 'OS' : null, p.canBowl && p.role !== 'BOWL' && p.role !== 'AR' ? 'bowls' : null].filter(Boolean).join(' · ');
+  const tired = (p: any) => (p.fatigue > 60 ? ` · tired ${p.fatigue}` : '');
+  const promised = (p: any) => (pre.promises ?? []).find((x: any) => x.playerId === p.id);
+  const PromiseTag = ({ p }: { p: any }) => (promised(p) ? <span title={`You promised: ${promised(p).text}`}><Badge tone={promised(p).kind === 'rest-next' ? 'info' : 'warn'}>promise</Badge></span> : null);
+  return (
+    <Card
+      title="Your starting XI"
+      actions={
+        <span className="flex gap-3 text-xs">
+          <button className="text-lime disabled:text-ink-faint" disabled={isAssistant} onClick={() => onChange(pre.suggestedXI)}>Assistant’s pick</button>
+          <button className="text-lime disabled:text-ink-faint" disabled={!check.ok} onClick={() => career.mutate('/lineup', { playerIds: xi }, { success: 'Saved as your default lineup.' })}>
+            Save as default
+          </button>
+        </span>
+      }
+    >
+      {pre.userXINote && <p className="mb-2 text-xs text-warn">{pre.userXINote}</p>}
+      <div className="mb-2 flex flex-wrap gap-2 text-xs" aria-live="polite">
+        <Badge tone={xi.length === 11 ? 'lime' : 'warn'}>{xi.length}/11</Badge>
+        <Badge tone={check.overseas > pre.maxOverseas ? 'warn' : 'muted'}>Overseas {check.overseas}/{pre.maxOverseas}</Badge>
+        <Badge tone={check.bowlers >= 5 ? 'muted' : 'warn'}>Bowling options {check.bowlers}</Badge>
+        <Badge tone={check.keeper ? 'muted' : 'warn'}>{check.keeper ? 'Keeper ✓' : 'No keeper'}</Badge>
+      </div>
+      {check.errors.map((m) => <p key={m} className="text-xs text-danger">{m}</p>)}
+      {check.warnings.map((m) => <p key={m} className="text-xs text-warn">{m}</p>)}
+      <div className="label mt-2">Batting order</div>
+      <ol className="mt-1 space-y-1 text-sm">
+        {xi.map((id, i) => {
+          const p = byId.get(id);
+          if (!p) return null;
+          return (
+            <li key={id} className="flex items-center gap-2">
+              <span className="num w-5 text-ink-faint">{i + 1}</span>
+              <PlayerName p={p} className="flex-1 truncate" />
+              <PromiseTag p={p} />
+              <span className="text-[11px] text-ink-faint">{tag(p)}{tired(p)}</span>
+              <OvrChip p={p} />
+              <span className="flex">
+                <button className="btn-quiet px-1.5 py-0.5" aria-label={`Move ${p.name} up`} disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+                <button className="btn-quiet px-1.5 py-0.5" aria-label={`Move ${p.name} down`} disabled={i === xi.length - 1} onClick={() => move(i, 1)}>↓</button>
+                <button className="btn-quiet px-1.5 py-0.5" aria-label={`Drop ${p.name}`} onClick={() => onChange(xi.filter((x) => x !== id))}>✕</button>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="label mt-4">Bench</div>
+      <ul className="mt-1 max-h-64 space-y-1 overflow-y-auto pr-1 text-sm">
+        {bench.map((p: any) => (
+          <li key={p.id} className={`flex items-center gap-2 ${p.injury ? 'opacity-50' : ''}`}>
+            <PlayerName p={p} className="flex-1 truncate" />
+            <PromiseTag p={p} />
+            <span className="text-[11px] text-ink-faint">{p.injury ? `injured · ${p.injury.daysRemaining}d` : `${tag(p)}${tired(p)}`}</span>
+            <OvrChip p={p} />
+            <button className="btn-quiet px-2 py-0.5 text-xs" aria-label={`Add ${p.name}`} disabled={!!p.injury || xi.length >= 11} onClick={() => onChange([...xi, p.id])}>+ Add</button>
+          </li>
+        ))}
+      </ul>
+      <SelectorNotes title="Assistant’s reasoning" notes={pre.suggestedReasons} />
+    </Card>
   );
 }
 
@@ -137,5 +239,4 @@ function XIList({ players }: { players: any[] }) {
   );
 }
 
-import { MatchDay } from './match/MatchDay';
 export const LiveMatch = MatchDay;

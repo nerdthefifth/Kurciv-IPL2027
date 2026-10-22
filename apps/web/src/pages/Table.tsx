@@ -4,6 +4,7 @@ import { useApi } from '../lib/api';
 import { useCareer } from '../lib/context';
 import { Async, Badge, Card, Empty, PageHeader } from '../components/ui';
 import { FixtureRow } from './Fixtures';
+import { usePlayerModal } from '../components/player';
 
 export function StandingsTable({ rows, highlight = 0, slots = 0 }: { rows: any[]; highlight?: number; slots?: number }) {
   const { id } = useCareer();
@@ -72,6 +73,66 @@ export function TablePage() {
           </div>
         )}
       </Async>
+      <CapsCard lid={lid} />
     </div>
+  );
+}
+
+/** The live Orange Cap (most runs) and Purple Cap (most wickets) races for a league this season. */
+function CapsCard({ lid }: { lid: string }) {
+  const career = useCareer();
+  const players = usePlayerModal();
+  const [comp, setComp] = useState<'league' | 'WCC'>('league');
+  const state = useApi<any>(`/careers/${career.id}/caps?league=${comp === 'WCC' ? 'WCC' : lid}`, [career.tick, lid, comp]);
+  const table = (rows: any[], kind: 'orange' | 'purple') => (
+    <table className="table text-sm">
+      <thead><tr><th>#</th><th>Player</th><th className="text-right">M</th>{kind === 'orange' ? <><th className="text-right">Runs</th><th className="text-right">Avg</th><th className="text-right">SR</th><th className="text-right">HS</th></> : <><th className="text-right">Wkts</th><th className="text-right">Econ</th><th className="text-right">Best</th></>}</tr></thead>
+      <tbody>
+        {rows.map((r: any, i: number) => (
+          <tr key={r.playerId} className={i === 0 ? (kind === 'orange' ? 'bg-[#f97316]/10' : 'bg-[#a855f7]/10') : ''}>
+            <td className="num text-ink-muted">{i === 0 ? <CapIcon kind={kind} /> : i + 1}</td>
+            <td><button className="font-medium hover:text-lime" onClick={() => players.open(r.playerId)}>{r.name}</button> <span className="text-xs text-ink-faint">{r.clubShort}</span></td>
+            <td className="num text-right text-ink-muted">{r.matches}</td>
+            {kind === 'orange'
+              ? <><td className="num text-right font-semibold">{r.runs}</td><td className="num text-right">{r.average ?? '—'}</td><td className="num text-right">{r.strikeRate ?? '—'}</td><td className="num text-right">{r.highScore}</td></>
+              : <><td className="num text-right font-semibold">{r.wickets}</td><td className="num text-right">{r.economy ?? '—'}</td><td className="num text-right">{r.best ?? '—'}</td></>}
+          </tr>
+        ))}
+        {!rows.length && <tr><td colSpan={7} className="py-3 text-center text-ink-muted">No matches played yet.</td></tr>}
+      </tbody>
+    </table>
+  );
+  return (
+    <Card title="Orange & Purple Cap" actions={
+      <span className="flex gap-1 text-xs">
+        <button className={`rounded px-2 py-0.5 ${comp === 'league' ? 'bg-lime/15 text-lime' : 'text-ink-muted'}`} onClick={() => setComp('league')}>League</button>
+        <button className={`rounded px-2 py-0.5 ${comp === 'WCC' ? 'bg-lime/15 text-lime' : 'text-ink-muted'}`} onClick={() => setComp('WCC')}>World Club Championship</button>
+      </span>
+    }>
+      <Async state={state}>
+        {(d) => (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div>
+              <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-[#f97316]"><CapIcon kind="orange" /> Orange Cap · most runs{d.competition ? ` · ${d.competition.name}` : ''}</div>
+              <div className="overflow-x-auto">{table(d.orange, 'orange')}</div>
+            </div>
+            <div>
+              <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-[#a855f7]"><CapIcon kind="purple" /> Purple Cap · most wickets{d.competition ? ` · ${d.competition.name}` : ''}</div>
+              <div className="overflow-x-auto">{table(d.purple, 'purple')}</div>
+            </div>
+          </div>
+        )}
+      </Async>
+    </Card>
+  );
+}
+
+export function CapIcon({ kind, size = 14 }: { kind: 'orange' | 'purple'; size?: number }) {
+  const c = kind === 'orange' ? '#f97316' : '#a855f7';
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" role="img" aria-label={kind === 'orange' ? 'Orange Cap' : 'Purple Cap'} className="inline-block shrink-0">
+      <path d="M2 10c0-4 2.7-7 6-7s6 3 6 7z" fill={c} />
+      <path d="M1 10h10.5c1.6 0 3 .6 3.5 1.5H1z" fill={c} opacity="0.8" />
+    </svg>
   );
 }

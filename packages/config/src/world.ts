@@ -1,7 +1,7 @@
 /** Server-side world configuration: reputation, qualification, development, condition and finance. */
 export const WORLD = {
   startSeason: 2027,
-  schemaVersion: 3,
+  schemaVersion: 4,
 
   reputation: {
     /** Learning rate applied to the (actual − expected) performance residual. */

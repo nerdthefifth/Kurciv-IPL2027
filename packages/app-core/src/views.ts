@@ -49,7 +49,10 @@ export function playerView(w: WorldState, p: Player, opts: { detail?: boolean } 
     }).sort((a, b) => b.season - a.season),
     dataNote: p.source === 'curated'
       ? 'Real player identity. Ratings and age are Kurciv editorial estimates; statistics are from this career only.'
-      : p.source === 'youth' ? 'Academy prospect generated in this career.' : 'Generated player — not a real person.',
+      : p.source === 'registry'
+        ? `Real player (Cricsheet data, ODC-BY). Nationality ${p.realWorld?.nationality === 'verified' ? 'verified from international appearances' : 'inferred from home competitions'}. Ratings, bowling style, batting hand and age are game estimates — Cricsheet does not record them.`
+        : p.source === 'youth' ? 'Academy prospect generated in this career.' : 'Generated player — not a real person.',
+    realWorld: p.realWorld ?? null,
     matchLog: matchLog(w, p),
     peers: peerPercentiles(w, p),
     scouting: scoutingReport(w, p, own),
@@ -178,7 +181,7 @@ export function overview(w: WorldState) {
   if (squad.some((p) => p.transferRequest)) urgent.push('A player has asked about their future (see Squad).');
   const injured = squad.filter((p) => p.injury);
   if (injured.length) urgent.push(`${injured.length} player(s) injured.`);
-  if (c.board.confidence < 30) urgent.push(`Board confidence is low (${c.board.confidence}).`);
+  if (c.board.confidence < 30) urgent.push(`Board confidence is low (${Math.round(c.board.confidence)}).`);
   return {
     season: w.season, day: w.day, phase: w.phase, managerName: w.managerName, difficulty: w.difficulty, settings: w.settings,
     club: clubView(w, c),

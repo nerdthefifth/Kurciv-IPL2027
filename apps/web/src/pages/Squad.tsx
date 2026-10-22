@@ -44,7 +44,7 @@ function SquadView({ d }: { d: any }) {
 
   const cols: Column<any>[] = [
     { key: 'xi', label: 'XI', render: (p) => <input type="checkbox" aria-label={`Select ${p.name} for the XI`} className="accent-[#c6ff1a]" checked={xi.includes(p.id)} onChange={() => toggle(p.id)} onClick={(e) => e.stopPropagation()} /> },
-    { key: 'name', label: 'Player', render: (p) => <span className="flex items-center gap-2"><PlayerName p={p} /> <ConditionBadges p={p} /></span>, sort: (p) => p.name },
+    { key: 'name', label: 'Player', render: (p) => <span className="flex items-center gap-2"><PlayerName p={p} /><LeaderBadge id={p.id} c={d.captaincy} /> <ConditionBadges p={p} /></span>, sort: (p) => p.name },
     { key: 'role', label: 'Role', render: (p) => <RoleBadge role={p.role} />, sort: (p) => p.role },
     { key: 'age', label: 'Age', render: (p) => <span className="num">{p.age}</span>, sort: (p) => p.age },
     { key: 'ovr', label: 'Ovr', render: (p) => <OvrChip p={p} />, sort: (p) => p.ovr },
@@ -69,7 +69,7 @@ function SquadView({ d }: { d: any }) {
         </div>
       )}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card title="Registered players" pad={false}>
+        <Card title="Registered players" pad={false} className="xl:row-span-2">
           <DataTable rows={d.players} columns={cols} rowKey={(p) => p.id} initialSort={{ key: 'ovr', dir: -1 }} />
         </Card>
         <Card title="Playing XI & batting order">
@@ -77,7 +77,7 @@ function SquadView({ d }: { d: any }) {
             {sel.map((p: any, i: number) => (
               <li key={p.id} className="flex items-center gap-2 rounded-lg border border-obsidian-700 bg-obsidian-850 px-2 py-1.5 text-sm">
                 <span className="num w-5 text-ink-muted">{i + 1}</span>
-                <span className="min-w-0 flex-1 truncate">{p.name} <span className="text-[11px] text-ink-faint">{p.role}{p.overseas ? ' · OS' : ''}</span></span>
+                <span className="min-w-0 flex-1 truncate">{p.name}<LeaderBadge id={p.id} c={d.captaincy} /> <span className="text-[11px] text-ink-faint">{p.role}{p.overseas ? ' · OS' : ''}</span></span>
                 <button className="btn-ghost px-1.5 py-0.5 text-xs" aria-label={`Move ${p.name} up`} onClick={() => move(i, -1)} disabled={i === 0}>▲</button>
                 <button className="btn-ghost px-1.5 py-0.5 text-xs" aria-label={`Move ${p.name} down`} onClick={() => move(i, 1)} disabled={i === sel.length - 1}>▼</button>
                 <button className="btn-ghost px-1.5 py-0.5 text-xs" aria-label={`Remove ${p.name}`} onClick={() => toggle(p.id)}>✕</button>
@@ -101,7 +101,56 @@ function SquadView({ d }: { d: any }) {
             {d.lineup ? 'Your saved XI is used for every match until you change it.' : 'No saved lineup: the assistant picks the best fit XI each match (fatigue, form and matchups considered).'}
           </p>
         </Card>
+        <LeadershipCard d={d} />
       </div>
     </div>
+  );
+}
+
+function LeaderBadge({ id, c }: { id: string; c: any }) {
+  if (!c) return null;
+  if (c.captainId === id) return <span className="ml-1 rounded bg-lime px-1 text-[10px] font-bold text-obsidian-950" title="Captain">C</span>;
+  if (c.viceCaptainId === id) return <span className="ml-1 rounded border border-lime/60 px-1 text-[10px] font-bold text-lime" title="Vice-captain">VC</span>;
+  return null;
+}
+
+/** Choose this season's captain and vice-captain. */
+function LeadershipCard({ d }: { d: any }) {
+  const career = useCareer();
+  const c = d.captaincy;
+  const [cap, setCap] = useState<string>(c?.captainId ?? d.suggestedLeaders.captainId ?? '');
+  const [vc, setVc] = useState<string>(c?.viceCaptainId ?? d.suggestedLeaders.viceCaptainId ?? '');
+  useEffect(() => {
+    setCap(c?.captainId ?? d.suggestedLeaders.captainId ?? '');
+    setVc(c?.viceCaptainId ?? d.suggestedLeaders.viceCaptainId ?? '');
+  }, [c?.captainId, c?.viceCaptainId, d.suggestedLeaders.captainId, d.suggestedLeaders.viceCaptainId]);
+  const players = [...d.players].sort((a: any, b: any) => (d.leadership[b.id] ?? 0) - (d.leadership[a.id] ?? 0));
+  const changed = cap !== c?.captainId || vc !== c?.viceCaptainId || !c?.confirmed;
+  const pick = (label: string, value: string, set: (v: string) => void, other: string) => (
+    <label className="block text-xs text-ink-muted">
+      {label}
+      <select className="input mt-0.5 w-full" value={value} onChange={(e) => set(e.target.value)}>
+        {players.map((p: any) => (
+          <option key={p.id} value={p.id} disabled={p.id === other}>
+            {p.name} · leadership {d.leadership[p.id] ?? '—'}{p.injury ? ' · injured' : ''}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  return (
+    <Card title={`Leadership${c?.season ? ` · ${c.season}` : ''}`} actions={c && !c.confirmed ? <Badge tone="warn">Not confirmed</Badge> : null}>
+      <div className="space-y-3">
+        {pick('Captain', cap, setCap, vc)}
+        {pick('Vice-captain', vc, setVc, cap)}
+        <div className="flex flex-wrap gap-2">
+          <button className="btn-primary" disabled={!cap || !vc || cap === vc || !changed} onClick={() => career.mutate('/captaincy', { captainId: cap, viceCaptainId: vc }, { success: 'Leaders confirmed for the season.' })}>
+            {c && !c.confirmed ? 'Confirm leaders' : 'Save leaders'}
+          </button>
+          <button className="btn-ghost" onClick={() => { setCap(d.suggestedLeaders.captainId ?? ''); setVc(d.suggestedLeaders.viceCaptainId ?? ''); }}>Assistant’s pick</button>
+        </div>
+        <p className="text-xs text-ink-faint">The captain leads whenever they play (otherwise the vice-captain does). A strong leader sharpens field and bowling decisions; being given or losing the armband affects morale. Leaders are chosen each season.</p>
+      </div>
+    </Card>
   );
 }

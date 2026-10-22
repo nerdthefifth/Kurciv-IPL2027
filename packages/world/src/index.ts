@@ -12,3 +12,5 @@ export * from './auction-live';
 export * from './story';
 export * from './impact';
 export * from './audit';
+export * from './clubworld';
+export * from './captaincy';

@@ -6,3 +6,5 @@ data/*.db-*
 coverage
 test-results/
 playwright-report/
+data/cache/
+.vercel

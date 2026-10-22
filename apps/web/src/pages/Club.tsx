@@ -3,7 +3,6 @@ import { cr, useApi } from '../lib/api';
 import { useCareer } from '../lib/context';
 import { Async, Badge, Card, DataTable, Meter, PageHeader, Stat } from '../components/ui';
 import { OvrChip, PlayerName, RoleBadge, ConditionBadges } from '../components/player';
-import { FieldEditor } from '../components/FieldEditor';
 
 export function ClubPage() {
   const { clubId } = useParams();
@@ -39,7 +38,9 @@ export function ClubPage() {
                   </div>
                   <div>
                     <div className="label mb-1">Where they score (right-hander’s view)</div>
-                    <FieldEditor positions={[]} showValidation={false} zoneRuns={i.team.zones.map((z: any) => z.runs)} label="Opponent scoring zones" />
+                    <div className="space-y-1">
+                      {i.team.zones.map((z: any) => <Meter key={z.zone} tone="lime" label={z.zone} display={`${z.runs} runs`} value={Math.round((z.runs / Math.max(1, ...i.team.zones.map((x: any) => x.runs))) * 100)} />)}
+                    </div>
                   </div>
                   <div className="lg:col-span-2 overflow-x-auto">
                     <table className="table">

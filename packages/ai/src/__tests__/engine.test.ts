@@ -68,67 +68,6 @@ describe('match engine', () => {
     }
   });
 
-  it('flags an illegal field and calls no-balls instead of moving fielders', () => {
-    let tested = false;
-    for (let k = 0; k < 6 && !tested; k++) {
-      const s = createMatch(setup(`illegal-${k}`, 'away'), `illegal-${k}`);
-      const ctl = { home: 'ai' as const, away: 'manual' as const };
-      let r = step(s, ctl, AiCaptain);
-      if (r.needs?.kind === 'toss-call') {
-        applyAction(s, 'away', { type: 'toss-call', call: 'heads' });
-        r = step(s, ctl, AiCaptain);
-      }
-      if (r.needs?.kind === 'toss') {
-        applyAction(s, 'away', { type: 'toss', decision: 'bowl' });
-        r = step(s, ctl, AiCaptain);
-      }
-      if (!r.needs && !r.event) r = step(s, ctl, AiCaptain); // the engine pauses after the toss
-      if (s.innings[0].bowlingSide !== 'away') continue;
-      if (r.needs?.kind === 'bowler') applyAction(s, 'away', { type: 'bowler', playerId: r.needs.eligible[0] });
-      const boundary = BUILT_IN_FIELDS.find((f) => f.id === 'boundary')!; // 5 out: illegal in the powerplay
-      const res = applyAction(s, 'away', { type: 'field', positions: boundary.positions, keeperUp: false });
-      expect(res.ok).toBe(true);
-      expect(res.warnings?.some((w) => w.startsWith('ILLEGAL'))).toBe(true);
-      const ev = step(s, ctl, AiCaptain).event!;
-      expect(ev.illegalField).toBe(true);
-      expect(ev.legal).toBe(false);
-      expect(s.innings[0].field.positions).toEqual(boundary.positions);
-      tested = true;
-    }
-    expect(tested).toBe(true);
-  });
-
-  it('field placement measurably changes outcomes', () => {
-    const fixedFieldCaptain: Captain = { ...AiCaptain, overStart: () => ({}) };
-    const run = (templateId: string) => {
-      let fours = 0;
-      let singles = 0;
-      let balls = 0;
-      for (let i = 0; i < 40; i++) {
-        const st = setup(`fld-${i}`);
-        const f = BUILT_IN_FIELDS.find((x) => x.id === templateId)!;
-        for (const t of [st.home, st.away]) {
-          t.fields = [{ ...f, id: 'fixed' }];
-          t.tactics = { ...t.tactics, fieldTemplateByPhase: { powerplay: 'fixed', middle: 'fixed', death: 'fixed' } };
-        }
-        const m = createMatch({ ...st, rules: { ...st.rules, maxOutsidePP: 9, maxOutside: 9 } }, `fld-${i}`);
-        let g = 0;
-        while (m.status !== 'complete' && g++ < 3000) step(m, { home: 'ai', away: 'ai' }, fixedFieldCaptain);
-        for (const d of m.deliveries) {
-          if (!d.legal || d.extras) continue;
-          balls++;
-          if (d.boundary === 4) fours++;
-          if (d.batRuns === 1) singles++;
-        }
-      }
-      return { fours: fours / balls, singles: singles / balls };
-    };
-    const ring = run('pp-control'); // 7 in the circle
-    const deep = run('boundary'); // 5 boundary riders
-    expect(deep.fours).toBeLessThan(ring.fours);
-    expect(deep.singles).toBeGreaterThan(ring.singles);
-  });
-
   it('tired, out-of-form XIs lose more often, but not always', () => {
     const N = 100;
     const winRate = (weaken: boolean) => {

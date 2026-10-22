@@ -1,15 +1,19 @@
 import { z } from 'zod';
-import type { WorldState } from '@kurciv/domain';
-import { validateXI } from '@kurciv/domain';
+import type { Fixture, WorldState } from '@kurciv/domain';
+import { canBowl, validateXI } from '@kurciv/domain';
 import { CLUB_SEEDS, COUNTRY_NAMES, FEATURE_FLAGS, IMAGE_LOOKUP, LEAGUES, VENUES, leagueById } from '@kurciv/config';
+import { PLAYER_DB_META, playerDatabase } from '@kurciv/data-ingestion';
 import { defaultTactics, pickXI, simulateMatch } from '@kurciv/ai';
-import { BUILT_IN_FIELDS, applyAction, createMatch, validateField, type MatchAction, type MatchState } from '@kurciv/simulation';
+import { BUILT_IN_FIELDS, applyAction, createMatch, type MatchAction, type MatchState } from '@kurciv/simulation';
 import {
   advance, advanceCascade, applyStoryAction, auctionAct, autoFillUserSquad, buildMatchSetup, clubsInLeague, commitRetentions, completeUserFixture,
   createWorld, endSeason, fastForward, facilityUpgradeCost, freeAgentsFor, liveCommand, liveTick, matchSeed, nextUserFixture, planFormat, promoteYouth,
   qualificationPath, releasePlayer, releaseYouth, selectXI, setUserRetentions, signFreeAgent, squadOf, squadProblems, startSeason, upgradeFacility,
+  capHolders, capRaces, setCaptaincy, suggestLeaders,
+  clubWorldSync, negotiateObjective, replyToConversation, respondToMessage, cw,
   type LiveCommand, type MatchRecord,
 } from '@kurciv/world';
+import { boardView, conversationsView, feedView, inboxView, newsView } from './clubworld-views';
 import { auctionRoomView, auctionSummary, userAuctionOf } from './auction-view';
 import { clubhouse, qualificationOdds } from './clubhouse';
 import { buildMatchReport } from './report/match-report';
@@ -35,7 +39,6 @@ function parse<T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer<T> {
 }
 
 const id = z.string().min(1).max(120);
-const point = z.object({ x: z.number().min(-100).max(100), y: z.number().min(-100).max(100) });
 const plan = z.object({
   lengths: z.record(z.enum(['yorker', 'full', 'good', 'back', 'short']), z.number().min(0).max(10)),
   lines: z.record(z.enum(['wide', 'off', 'stumps', 'leg']), z.number().min(0).max(10)),
@@ -171,6 +174,12 @@ export class Backend {
       try {
         const r = fn(entry.world);
         out = r && typeof r === 'object' && 'result' in (r as object) ? (r as { result: T; records?: MatchRecord[] }) : { result: r as T };
+        // Turn whatever just happened in the simulation into Club World events (idempotent).
+        try {
+          clubWorldSync(entry.world);
+        } catch (e) {
+          console.error('Club World sync failed', e); // never block the user's action on a reaction
+        }
       } catch (e) {
         this.cache.delete(cid); // never keep a half-applied change
         if (e instanceof AppError) throw e;
@@ -253,6 +262,7 @@ export class Backend {
         throw new AppError(400, (e as Error).message);
       }
       applyPhilosophy(world, input.philosophy);
+      clubWorldSync(world);
       const meta = this.deriveMeta(world, null);
       this.onSave({ state: 'saving', careerId, at: meta.createdAt });
       try {
@@ -332,7 +342,27 @@ export class Backend {
         suggestedXI: squad.length >= 11 ? pickXI(squad, l.squadRules, l.domesticCountries).map((p) => p.id) : [],
         problems: squadProblems(w, club),
         lineupCheck: club.lineup ? validateXI(club.lineup.map((pid) => w.players[pid]), club.squad, l.squadRules, l.domesticCountries) : null,
+        captaincy: club.captaincy ?? null,
+        suggestedLeaders: suggestLeaders(w, club),
+        leadership: Object.fromEntries(squad.map((p) => [p.id, Math.round(p.attrs.mental.leadership)])),
       };
+    }));
+
+    r('POST', '/careers/:cid/captaincy', async ({ params, body }) => {
+      const { captainId, viceCaptainId } = parse(z.object({ captainId: id, viceCaptainId: id }), body);
+      return this.mutate(params.cid, (w) => {
+        const err = setCaptaincy(w, captainId, viceCaptainId);
+        if (err) throw new AppError(400, err);
+        return { result: {} };
+      });
+    });
+
+    r('GET', '/careers/:cid/caps', ({ params, query }) => this.view(params.cid, (w) => {
+      const lid = query.get('league') ?? w.clubs[w.userClubId].leagueId;
+      const compId = lid === 'WCC' ? `WCC-${w.season}` : `${lid}-${w.season}`;
+      const comp = w.competitions[compId];
+      const races = comp ? capRaces(w, compId) : { orange: [], purple: [] };
+      return { season: w.season, competition: comp ? { id: comp.id, name: comp.name, stage: comp.stage } : null, ...races };
     }));
 
     r('GET', '/careers/:cid/players', ({ params, query }) => this.view(params.cid, (w) => {
@@ -407,6 +437,34 @@ export class Backend {
       return buildMatchReport(record, { world: w, fixture, season: fixture?.season ?? w.season });
     });
 
+    // -------- the player database (all records, with each one's status in this career)
+    r('GET', '/careers/:cid/database', async ({ params, query }) => {
+      const { world: w } = await this.load(params.cid);
+      const q = parse(z.object({
+        search: z.string().max(60).optional(), kind: z.enum(['all', 'real', 'generated']).optional(), gender: z.enum(['all', 'male', 'female']).optional(),
+        nationality: z.enum(['all', 'verified', 'inferred', 'unknown']).optional(), status: z.enum(['all', 'active', 'stale']).optional(),
+        country: z.string().max(4).optional(), page: z.coerce.number().int().min(0).max(1000).optional(),
+      }), Object.fromEntries(query));
+      const s = q.search?.trim().toLowerCase();
+      let list = playerDatabase();
+      if (q.kind && q.kind !== 'all') list = list.filter((r) => r.kind === q.kind);
+      if (q.gender && q.gender !== 'all') list = list.filter((r) => r.gender === q.gender);
+      if (q.nationality && q.nationality !== 'all') list = list.filter((r) => r.nationality === q.nationality);
+      if (q.status && q.status !== 'all') list = list.filter((r) => r.status === q.status);
+      if (q.country) list = list.filter((r) => r.country === q.country);
+      if (s) list = list.filter((r) => r.name.toLowerCase().includes(s));
+      const page = q.page ?? 0;
+      const rows = list.slice(page * 50, page * 50 + 50).map((r) => {
+        const p = w.players[r.id];
+        return {
+          ...r, countryName: r.country ? COUNTRY_NAMES[r.country] : null,
+          inGame: p ? (p.retired ? 'Retired' : p.clubId ? w.clubs[p.clubId].name : p.isYouth ? 'Academy' : 'Free agent') : r.gender === 'female' ? 'Not in game (men’s competitions only)' : 'Not in this world',
+          playerId: p ? p.id : null,
+        };
+      });
+      return { total: list.length, page, pageSize: 50, rows, meta: PLAYER_DB_META };
+    });
+
     r('GET', '/careers/:cid/archive', async ({ params, query }) => {
       const { world: w } = await this.load(params.cid);
       const { season, club } = parse(z.object({ season: z.coerce.number().int().min(2000).max(2200).default(w.season), club: id.optional() }), { season: query.get('season') ?? undefined, club: query.get('club') ?? undefined });
@@ -440,6 +498,88 @@ export class Backend {
     }));
 
     r('GET', '/careers/:cid/news', ({ params }) => this.view(params.cid, (w) => ({ news: w.news })));
+
+    // -------- the Club World: inbox, world news, conversations, boardroom, cricket feed
+    r('GET', '/careers/:cid/inbox', ({ params, query }) => this.view(params.cid, (w) => inboxView(w, { box: query.get('box') ?? undefined, category: query.get('category') ?? undefined, search: query.get('q') ?? undefined })));
+    r('POST', '/careers/:cid/inbox/:mid', async ({ params, body }) => {
+      const { op } = parse(z.object({ op: z.enum(['read', 'unread', 'archive', 'unarchive', 'pin', 'unpin']) }), body);
+      return this.mutate(params.cid, (w) => {
+        const m = cw(w).inbox.find((x) => x.id === params.mid);
+        if (!m) throw new AppError(404, 'Message not found.');
+        if (op === 'read' || op === 'unread') m.read = op === 'read';
+        if (op === 'archive' || op === 'unarchive') m.archived = op === 'archive';
+        if (op === 'pin' || op === 'unpin') m.pinned = op === 'pin';
+        return { result: {} };
+      });
+    });
+    r('POST', '/careers/:cid/inbox-read-all', ({ params }) => this.mutate(params.cid, (w) => {
+      for (const m of cw(w).inbox) if (m.season < w.season || m.day <= w.day) m.read = true;
+      return { result: {} };
+    }));
+    r('POST', '/careers/:cid/inbox/:mid/respond', async ({ params, body }) => {
+      const { optionId } = parse(z.object({ optionId: z.string().max(40) }), body);
+      return this.mutate(params.cid, (w) => {
+        const res = respondToMessage(w, params.mid, optionId, {
+          story: (sid, index) => {
+            const r = applyStoryAction(w, sid, index, { promoteYouth, releasePlayer });
+            return r.ok ? null : r.error ?? 'That action failed.';
+          },
+        });
+        if (!res.ok) throw new AppError(400, res.error!);
+        return { result: { outcome: res.outcome } };
+      });
+    });
+    r('GET', '/careers/:cid/world-news', ({ params, query }) => this.view(params.cid, (w) => newsView(w, { filter: query.get('filter') ?? undefined, page: Number(query.get('page') ?? 0) || 0 })));
+    r('GET', '/careers/:cid/conversations', ({ params }) => this.view(params.cid, conversationsView));
+    r('POST', '/careers/:cid/conversations/:id/reply', async ({ params, body }) => {
+      const { optionId } = parse(z.object({ optionId: z.string().max(40) }), body);
+      return this.mutate(params.cid, (w) => {
+        const res = replyToConversation(w, params.id, optionId);
+        if (!res.ok) throw new AppError(400, res.error!);
+        return { result: { outcome: res.outcome } };
+      });
+    });
+    r('GET', '/careers/:cid/board', ({ params }) => this.view(params.cid, boardView));
+    r('POST', '/careers/:cid/board/negotiate', async ({ params, body }) => {
+      const { objectiveId } = parse(z.object({ objectiveId: id }), body);
+      return this.mutate(params.cid, (w) => {
+        const err = negotiateObjective(w, objectiveId);
+        if (err) throw new AppError(400, err);
+        return { result: {} };
+      });
+    });
+    r('GET', '/careers/:cid/feed', ({ params, query }) => this.view(params.cid, (w) => feedView(w, { filter: query.get('filter') ?? undefined, page: Number(query.get('page') ?? 0) || 0 })));
+    r('POST', '/careers/:cid/follow', async ({ params, body }) => {
+      const f = parse(z.object({ kind: z.enum(['player', 'club', 'account']), id, on: z.boolean() }), body);
+      return this.mutate(params.cid, (w) => {
+        const c = cw(w);
+        const list = f.kind === 'account' ? c.feed.following : f.kind === 'player' ? c.follows.players : c.follows.clubs;
+        const i = list.indexOf(f.id);
+        if (f.on && i < 0) list.push(f.id);
+        if (!f.on && i >= 0) list.splice(i, 1);
+        return { result: {} };
+      });
+    });
+    r('POST', '/careers/:cid/feed/mute', async ({ params, body }) => {
+      const f = parse(z.object({ topic: z.string().max(20), on: z.boolean() }), body);
+      return this.mutate(params.cid, (w) => {
+        const m = cw(w).feed.muted;
+        const i = m.indexOf(f.topic);
+        if (f.on && i < 0) m.push(f.topic);
+        if (!f.on && i >= 0) m.splice(i, 1);
+        return { result: {} };
+      });
+    });
+    r('POST', '/careers/:cid/feed/save', async ({ params, body }) => {
+      const f = parse(z.object({ postId: id, on: z.boolean() }), body);
+      return this.mutate(params.cid, (w) => {
+        const m = cw(w).feed.saved;
+        const i = m.indexOf(f.postId);
+        if (f.on && i < 0) m.push(f.postId);
+        if (!f.on && i >= 0) m.splice(i, 1);
+        return { result: {} };
+      });
+    });
     r('GET', '/careers/:cid/stories', ({ params }) => this.view(params.cid, (w) => ({ active: w.stories.filter((s) => s.status === 'active'), recent: w.stories.slice(0, 40), timeline: [...w.timeline].reverse() })));
 
     r('POST', '/careers/:cid/stories/:sid/act', async ({ params, body }) => {
@@ -508,6 +648,7 @@ export class Backend {
       const opp = w.clubs[oppId];
       const mine = selectXI(w, user, fx);
       const theirs = selectXI(w, opp, fx);
+      const assistant = user.lineup ? selectXI(w, { ...user, lineup: null }, fx) : mine;
       const records = [...(await this.store.seasonRecords(params.cid, w.season, [oppId])), ...(await this.store.seasonRecords(params.cid, w.season - 1, [oppId]))];
       const intel = opponentReport(w, oppId, records);
       return {
@@ -515,7 +656,11 @@ export class Backend {
         venue: { id: venue.id, name: venue.name, city: venue.city, boundaryStraight: venue.boundaryStraight, boundarySquare: venue.boundarySquare, altitude: venue.altitude, pitch: venue.pitch, dewChance: venue.dewChance },
         user: clubView(w, user), opponent: clubView(w, opp),
         userXI: mine.xi.map((p) => playerView(w, p)), userXINote: mine.note, lineupSaved: !!user.lineup,
-        opponentXI: theirs.xi.map((p) => playerView(w, p)),
+        opponentXI: theirs.xi.map((p) => playerView(w, p)), opponentReasons: theirs.reasons,
+        squad: squadOf(w, user).map((p) => ({ ...playerView(w, p), canBowl: canBowl(p), keeper: p.role === 'WK' || p.attrs.field.keeping >= 60 })),
+        suggestedXI: assistant.xi.map((p) => p.id), suggestedReasons: assistant.reasons,
+        maxOverseas: leagueById(user.leagueId).squadRules.maxOverseasInXI,
+        promises: cw(w).promises.filter((p) => p.status === 'active' && p.to.kind === 'player' && p.matches !== null).map((p) => ({ playerId: p.to.id, kind: p.kind, text: p.text })),
         intel: { recommendations: intel.recommendations, matches: intel.matches, team: intel.team },
         headToHead: w.rivalries[[user.id, oppId].sort().join('|')] ?? null,
       };
@@ -686,49 +831,20 @@ export class Backend {
       battingIntent: z.number().min(0).max(1),
       phaseIntent: z.object({ powerplay: z.number().min(0).max(1), middle: z.number().min(0).max(1), death: z.number().min(0).max(1) }),
       bowlingPlan: plan,
-      fieldTemplateByPhase: z.object({ powerplay: id, middle: id, death: id }),
-      mirrorForLeftHanders: z.boolean(),
       reviewPolicy: z.enum(['conservative', 'balanced', 'aggressive']),
     });
     r('GET', '/careers/:cid/tactics', ({ params }) => this.view(params.cid, (w) => {
       const club = w.clubs[w.userClubId];
-      return { tactics: club.defaultTactics, fields: [...BUILT_IN_FIELDS, ...club.fieldTemplates], custom: club.fieldTemplates, dna: club.dna, training: club.training, venue: VENUES.find((v) => v.id === club.venueId) };
+      return { tactics: club.defaultTactics, dna: club.dna, training: club.training, venue: VENUES.find((v) => v.id === club.venueId) };
     }));
     r('POST', '/careers/:cid/tactics', async ({ params, body }) => {
       const t = parse(tactics, body);
       return this.mutate(params.cid, (w) => {
         const club = w.clubs[w.userClubId];
-        const all = [...BUILT_IN_FIELDS, ...club.fieldTemplates];
-        for (const fid of Object.values(t.fieldTemplateByPhase)) if (!all.some((f) => f.id === fid)) throw new AppError(400, `Unknown field template ${fid}.`);
-        const pp = all.find((f) => f.id === t.fieldTemplateByPhase.powerplay)!;
-        const v = validateField(pp.positions, 'R', { powerplay: true, maxOutsidePP: 2, maxOutside: 5 });
-        club.defaultTactics = t;
-        return { result: { warnings: v.legal ? [] : [`Your powerplay field "${pp.name}" is illegal in the powerplay: ${v.errors.join(' ')} Deliveries would be no-balls.`] } };
+        club.defaultTactics = { ...club.defaultTactics, ...t };
+        return { result: { warnings: [] } };
       });
     });
-
-    r('POST', '/careers/:cid/fields', async ({ params, body }) => {
-      const f = parse(z.object({ id: z.string().max(40).optional(), name: z.string().trim().min(1).max(40), positions: z.array(point).length(9), keeperUp: z.boolean(), situation: z.string().max(30).optional() }), body);
-      return this.mutate(params.cid, (w) => {
-        const club = w.clubs[w.userClubId];
-        if (BUILT_IN_FIELDS.some((b) => b.id === f.id)) throw new AppError(400, 'Built-in fields cannot be overwritten — save under a new name.');
-        if (!f.id && club.fieldTemplates.length >= 30) throw new AppError(400, 'You can save at most 30 custom fields.');
-        const tid = f.id ?? `custom-${crypto.randomUUID().slice(0, 8)}`;
-        const tpl = { id: tid, name: f.name, positions: f.positions, keeperUp: f.keeperUp, situation: f.situation, builtIn: false };
-        const i = club.fieldTemplates.findIndex((x) => x.id === tid);
-        if (i >= 0) club.fieldTemplates[i] = tpl;
-        else club.fieldTemplates.push(tpl);
-        const pp = validateField(f.positions, 'R', { powerplay: true, maxOutsidePP: 2, maxOutside: 5 });
-        const other = validateField(f.positions, 'R', { powerplay: false, maxOutsidePP: 2, maxOutside: 5 });
-        return { result: { template: tpl, legalInPowerplay: pp.legal, legalOutsidePowerplay: other.legal, errors: other.errors, warnings: [...pp.errors.map((e) => `Powerplay: ${e}`), ...other.warnings] } };
-      });
-    });
-    r('DELETE', '/careers/:cid/fields/:fieldId', ({ params }) => this.mutate(params.cid, (w) => {
-      const club = w.clubs[w.userClubId];
-      if (Object.values(club.defaultTactics.fieldTemplateByPhase).includes(params.fieldId)) throw new AppError(400, 'That field is assigned to a phase in your tactics — reassign it first.');
-      club.fieldTemplates = club.fieldTemplates.filter((x) => x.id !== params.fieldId);
-      return { result: {} };
-    }));
 
     const focus = z.enum(['balanced', 'batting', 'pace', 'spin', 'fielding', 'fitness']);
     r('POST', '/careers/:cid/training', async ({ params, body }) => {
@@ -795,14 +911,25 @@ export class Backend {
     // -------- matches
     const xiSchema = z.object({ fixtureId: id, xi: z.array(id).length(11).optional() });
 
+    /** The user's XI for this fixture: the one chosen before the match if valid, else the saved lineup or the assistant's pick. */
+    const userXIFor = (w: WorldState, fx: Fixture, xi?: string[]) => {
+      const club = w.clubs[w.userClubId];
+      if (!xi) return selectXI(w, club, fx).xi;
+      const l = leagueById(club.leagueId);
+      const players = xi.map((pid) => w.players[pid]).filter(Boolean);
+      const v = validateXI(players, club.squad, l.squadRules, l.domesticCountries);
+      if (!v.ok) throw new AppError(400, v.errors.join(' '));
+      return players;
+    };
+
     r('POST', '/careers/:cid/match/quick', async ({ params, body }) => {
-      const { fixtureId } = parse(xiSchema, body);
+      const { fixtureId, xi } = parse(xiSchema, body);
       if (await this.store.getLive(params.cid, 'main')) throw new AppError(409, 'A live match is in progress.');
       return this.mutate(params.cid, (w) => {
         const fx = w.fixtures[fixtureId];
         if (!fx?.involvesUser || fx.status !== 'scheduled') throw new AppError(400, 'That is not your next match.');
         if (fx.day !== w.day) throw new AppError(400, 'Advance to match day first.');
-        const state = simulateMatch(buildMatchSetup(w, fx), matchSeed(w, fx));
+        const state = simulateMatch(buildMatchSetup(w, fx, userXIFor(w, fx, xi)), matchSeed(w, fx));
         completeUserFixture(w, fx.id, state);
         recordOdds(w, fx.id);
         return { result: { fixture: fixtureView(w, fx) }, records: [{ fixtureId: fx.id, state }] };
@@ -817,16 +944,7 @@ export class Backend {
         const fx = w.fixtures[fixtureId];
         if (!fx?.involvesUser || fx.status !== 'scheduled') throw new AppError(400, 'That is not your next match.');
         if (fx.day !== w.day) throw new AppError(400, 'Advance to match day first.');
-        const club = w.clubs[w.userClubId];
-        let userXI;
-        if (xi) {
-          const l = leagueById(club.leagueId);
-          const players = xi.map((pid) => w.players[pid]).filter(Boolean);
-          const v = validateXI(players, club.squad, l.squadRules, l.domesticCountries);
-          if (!v.ok) throw new AppError(400, v.errors.join(' '));
-          userXI = players;
-        } else userXI = selectXI(w, club, fx).xi;
-        live = { state: createMatch(buildMatchSetup(w, fx, userXI), matchSeed(w, fx)), ctlTimeline: [], experimental: false };
+        live = { state: createMatch(buildMatchSetup(w, fx, userXIFor(w, fx, xi)), matchSeed(w, fx)), ctlTimeline: [], experimental: false };
         fx.status = 'live';
         return { result: { fixtureId: fx.id } };
       });
@@ -838,19 +956,16 @@ export class Backend {
       z.object({ type: z.literal('toss-call'), call: z.enum(['heads', 'tails']) }),
       z.object({ type: z.literal('toss'), decision: z.enum(['bat', 'bowl']) }),
       z.object({ type: z.literal('batter'), playerId: id }),
-      z.object({ type: z.literal('auto'), settings: z.object({ bowler: z.boolean(), batter: z.boolean(), field: z.boolean(), approach: z.boolean(), plan: z.boolean(), reviews: z.boolean() }).partial() }),
+      z.object({ type: z.literal('auto'), settings: z.object({ bowler: z.boolean(), batter: z.boolean(), approach: z.boolean(), plan: z.boolean(), reviews: z.boolean() }).partial() }),
       z.object({ type: z.literal('running'), value: z.enum(['conservative', 'balanced', 'aggressive']) }),
       z.object({ type: z.literal('phase-intent'), phase: z.enum(['powerplay', 'middle', 'death']), value: z.number().min(0).max(1) }),
-      z.object({ type: z.literal('save-field'), name: z.string().trim().min(1).max(40) }),
-      z.object({ type: z.literal('bowler-field'), bowlerId: id, templateId: z.string().max(40).nullable() }),
       z.object({ type: z.literal('batter-plan'), batterId: id, vsPace: z.number().min(-0.3).max(0.3).nullable(), vsSpin: z.number().min(-0.3).max(0.3).nullable() }),
       z.object({ type: z.literal('bowler'), playerId: id }),
-      z.object({ type: z.literal('field'), positions: z.array(point).length(9), keeperUp: z.boolean(), templateId: z.string().max(40).nullable().optional(), name: z.string().max(40).optional() }),
       z.object({ type: z.literal('plan'), plan, batterId: id.nullable().optional() }),
       z.object({ type: z.literal('intent'), value: z.number().min(0).max(1).nullable(), batterId: id.optional() }),
       z.object({ type: z.literal('order'), order: z.array(id).max(11) }),
+      z.object({ type: z.literal('openers'), strikerId: id, nonStrikerId: id }),
       z.object({ type: z.literal('review'), review: z.boolean() }),
-      z.object({ type: z.literal('mirror'), value: z.boolean() }),
     ]);
 
     for (const slot of ['main', 'lab'] as const) {
@@ -864,7 +979,10 @@ export class Backend {
         await this.load(params.cid);
         const live = await this.store.getLive(params.cid, slot);
         if (!live) return { live: null };
-        return { live: { fixtureId: live.fixtureId, version: live.version, experimental: live.data.experimental, state: liveView(live.data.state, Number(query.get('since') ?? 0)) } };
+        const { world: w } = await this.load(params.cid);
+        const compId = w.fixtures[live.fixtureId]?.competitionId;
+        const caps = compId ? capHolders(w)[compId] ?? null : null;
+        return { live: { fixtureId: live.fixtureId, version: live.version, experimental: live.data.experimental, caps, state: liveView(live.data.state, Number(query.get('since') ?? 0)) } };
       });
       r('POST', `/careers/:cid/${base}/step`, async ({ params, body }) => {
         const { mode, version, since } = parse(z.object({ mode: z.enum(['toss', 'ball', 'over', 'next-over', 'key', 'innings', 'end']), version: z.number().int(), since: z.number().int().min(0).default(0) }), body);
@@ -956,8 +1074,6 @@ function applyPhilosophy(w: WorldState, philosophy: 'balanced' | 'aggressive' | 
   const t = defaultTactics();
   if (philosophy === 'aggressive') t.phaseIntent = { powerplay: 0.58, middle: 0.48, death: 0.78 };
   if (philosophy === 'anchored') t.phaseIntent = { powerplay: 0.38, middle: 0.32, death: 0.6 };
-  if (philosophy === 'spin') t.fieldTemplateByPhase = { powerplay: 'pp-control', middle: 'mid-spin', death: 'boundary' };
-  if (philosophy === 'pace') t.fieldTemplateByPhase = { powerplay: 'pp-attack', middle: 'mid-pace', death: 'death-yorker' };
   club.defaultTactics = t;
   club.dna.aggression = philosophy === 'aggressive' ? 65 : philosophy === 'anchored' ? 38 : 50;
   club.dna.spinReliance = philosophy === 'spin' ? 65 : philosophy === 'pace' ? 35 : 50;

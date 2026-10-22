@@ -8,11 +8,20 @@ export const SPEED_MS: Record<Speed, number> = { slow: 2200, normal: 1100, fast:
 export type StepMode = 'toss' | 'ball' | 'over' | 'next-over' | 'innings' | 'end';
 
 /**
+ * A visual presenter (the 3D view). When registered, resolved deliveries are shown before the
+ * score and decisions update, so the board never runs ahead of the picture. It only reads the
+ * engine's result; it can never change it.
+ */
+export interface Presenter {
+  present: (fresh: any[], ctx: { state: any; needs: any }) => Promise<void>;
+}
+
+/**
  * Drives a live match. Every request goes through one serial queue, so a delivery and a
  * tactical change can never overlap: changes made during continuous play land between balls.
  * The engine (in the worker) remains the single source of truth; this hook only mirrors it.
  */
-export function useMatch(slot: 'match' | 'lab', initial: any) {
+export function useMatch(slot: 'match' | 'lab', initial: any, presenter?: { current: Presenter | null }) {
   const career = useCareer();
   const toast = useToast();
   const base = `/careers/${career.id}/${slot}`;
@@ -72,6 +81,10 @@ export function useMatch(slot: 'match' | 'lab', initial: any) {
     setBusy(true);
     try {
       const r = await api<any>(`${base}/step`, { body: { mode, version: version.current, since: lastSeq.current } });
+      // Instant simulation (innings / match) skips the picture; ball-by-ball and overs are shown.
+      if (presenter?.current && (mode === 'ball' || mode === 'over' || mode === 'next-over')) {
+        await presenter.current.present(r.state.deliveries ?? [], { state: r.state, needs: r.needs ?? r.state.pending ?? null }).catch(() => undefined);
+      }
       const prev = inningsCount.current;
       inningsCount.current = r.state.innings.length;
       return { fresh: apply(r), needs: r.needs ?? r.state.pending ?? null, complete: r.state.status === 'complete', inningsOver: prev > 0 && r.state.innings.length > prev };
@@ -94,6 +107,9 @@ export function useMatch(slot: 'match' | 'lab', initial: any) {
     setBusy(true);
     try {
       const r = await api<any>(`${base}/action`, { body: { action, version: version.current, since: lastSeq.current } });
+      if (presenter?.current && r.state.deliveries?.length) {
+        await presenter.current.present(r.state.deliveries, { state: r.state, needs: r.needs ?? r.state.pending ?? null }).catch(() => undefined);
+      }
       apply(r);
       const pending = r.state.pending;
       if (resumeAfterChoice.current && (action.type === 'bowler' || action.type === 'batter') && !pending) {
@@ -123,7 +139,8 @@ export function useMatch(slot: 'match' | 'lab', initial: any) {
         // Stop for decisions, reviews, the end of an innings and the end of the match.
         if (r && r.needs && (r.needs.kind === 'bowler' || r.needs.kind === 'batter')) resumeAfterChoice.current = true;
         if (!r || r.needs || r.complete || r.inningsOver || r.fresh.some((x: any) => x.review)) break;
-        await new Promise((res) => setTimeout(res, SPEED_MS[speedRef.current]));
+        // With a presenter the animation itself sets the pace; otherwise wait between balls.
+        await new Promise((res) => setTimeout(res, presenter?.current ? 250 : SPEED_MS[speedRef.current]));
       }
       playingRef.current = false;
       setPlaying(false);

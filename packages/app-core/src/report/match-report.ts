@@ -426,12 +426,12 @@ function tacticalReview(s: MatchState, innings: InningsReport[], teams: MatchRep
   }
   // User tactical changes, linked to what followed (observation, not causation).
   if (s.setup.userSide) {
-    for (const a of s.actions.filter((x) => x.side === s.setup.userSide && (x.action.type === 'field' || x.action.type === 'plan' || x.action.type === 'intent')).slice(0, 4)) {
+    for (const a of s.actions.filter((x) => x.side === s.setup.userSide && (x.action.type === 'plan' || x.action.type === 'intent')).slice(0, 4)) {
       const after = s.deliveries.filter((d) => d.seq > a.seq).slice(0, 18);
       if (!after.length) continue;
       const runs = after.reduce((t, d) => t + d.totalRuns, 0);
       const wk = after.filter((d) => d.wicket).length;
-      const what = a.action.type === 'field' ? `field change${a.action.name ? ` to “${a.action.name}”` : ''}` : a.action.type === 'plan' ? 'bowling plan change' : 'batting intent change';
+      const what = a.action.type === 'plan' ? 'bowling plan change' : 'batting intent change';
       observed.push(`After your ${what} (ball ${a.seq}), the next ${after.length} deliveries produced ${runs} runs and ${wk} wicket${wk === 1 ? '' : 's'} — what followed, not proof of cause.`);
     }
   }

@@ -48,8 +48,8 @@ export function FinancesPage() {
               </div>
             </Card>
             <Card title="Board" className="xl:col-span-1">
-              <div className="num text-4xl">{d.board.confidence}<span className="text-base text-ink-muted">/100</span></div>
-              <p className="text-sm text-ink-muted">Board confidence{d.board.warnings ? ` · ${d.board.warnings} warning(s)` : ''}. Below 30 the board freezes facility spending; repeated failure ends your tenure, and another club offers you a new job.</p>
+              <div className="num text-4xl">{Math.round(d.board.confidence)}<span className="text-base text-ink-muted">/100</span></div>
+              <p className="text-sm text-ink-muted">Board confidence{d.board.warnings ? ` · ${d.board.warnings} warning(s)` : ''}. Below 30 the board freezes facility spending; repeated failure ends your tenure (see the Boardroom for the exact rule), and another club offers you a new job.</p>
               <ul className="mt-3 space-y-1 text-sm">{d.board.objectives.map((o: any) => <li key={o.id}><Badge tone={o.status === 'met' ? 'lime' : o.status === 'failed' ? 'danger' : 'muted'}>{o.status}</Badge> {o.description}</li>)}</ul>
             </Card>
             <Card title="Coaching staff" className="xl:col-span-2">

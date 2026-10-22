@@ -20,6 +20,7 @@ export function ConditionBadges({ p }: { p: any }) {
       {p.fatigue >= 70 && !p.injury && <Badge tone="warn" title={`Fatigue ${p.fatigue}`}>Tired</Badge>}
       {p.transferRequest && <Badge tone="warn">Unsettled</Badge>}
       {p.source === 'generated' && <Badge tone="muted" title="Generated player — not a real person">Gen</Badge>}
+      {p.source === 'registry' && <Badge tone="muted" title="Real player from the licensed database; ratings, styles and age are game estimates">Est.</Badge>}
       {p.source === 'youth' && <Badge tone="info" title="Academy product">Academy</Badge>}
       {p.overseas && <Badge tone="info" title="Overseas player for registration purposes">OS</Badge>}
     </span>
@@ -224,6 +225,18 @@ function PlayerProfile({ id, onClose }: { id: string; onClose: () => void }) {
                   </table>
                 ) : <p className="text-sm text-ink-muted">Development is reviewed at the end of each season. Potential is a scouted range, not a promise.</p>}
                 {p.personality && <p className="text-sm text-ink-muted">Personality: {p.personality}. Work ethic and morale shape how quickly potential is realised.</p>}
+              </div>
+            )}
+            {tab === 'career' && p.realWorld?.record && (
+              <div className="panel p-4 text-sm">
+                <div className="label mb-2">Real-world record, 2024–2026 (Cricsheet)</div>
+                <dl className="grid grid-cols-3 gap-y-1.5 sm:grid-cols-6">
+                  {[['Matches', p.realWorld.record.matches], ['Runs', p.realWorld.record.runs], ['Balls', p.realWorld.record.balls], ['4s / 6s', `${p.realWorld.record.fours} / ${p.realWorld.record.sixes}`],
+                    ['Wickets', p.realWorld.record.wickets], ['Catches', p.realWorld.record.catches]].map(([k, v]) => (
+                    <div key={k as string}><dt className="text-xs text-ink-muted">{k}</dt><dd className="num">{v}</dd></div>
+                  ))}
+                </dl>
+                <p className="mt-2 text-xs text-ink-faint">Real matches across all formats{p.realWorld.lastSeen ? `, last seen ${p.realWorld.lastSeen}` : ''}{p.realWorld.competitions.length ? ` · ${p.realWorld.competitions.join(', ')}` : ''}. Shown for reference only — it does not feed the in-game statistics above.</p>
               </div>
             )}
             {tab === 'contract' && (

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { WorldState } from '@kurciv/domain';
 import { isOverseas } from '@kurciv/domain';
 import { LEAGUES } from '@kurciv/config';
+import { primeClubWorld } from '@kurciv/world';
 import { GAME_VERSION, SAVE_SCHEMA_VERSION, type CareerMeta, type MatchRow } from './persistence';
 
 /**
@@ -51,6 +52,7 @@ export function migrateWorld(world: WorldState, from: number): WorldState {
     w.appearances ??= {};
   }
   if (from < 3) w.matchImpacts ??= {};
+  if (from < 4 || !w.clubWorld) primeClubWorld(w);
   w.schemaVersion = SAVE_SCHEMA_VERSION;
   return w;
 }

@@ -8,12 +8,19 @@ import { ClubCrest } from './media';
 import { StoryCard } from './story';
 import { Confirm } from './ui';
 
-type NavItem = { to: string; label: string; icon: IconName };
+type NavItem = { to: string; label: string; icon: IconName; badge?: 'inbox' | 'talks' };
 const NAV: { section: string; items: NavItem[] }[] = [
   { section: 'Club', items: [
     { to: '', label: 'Overview', icon: 'home' },
     { to: 'squad', label: 'Squad', icon: 'squad' },
     { to: 'tactics', label: 'Tactics', icon: 'tactics' },
+  ] },
+  { section: 'Club World', items: [
+    { to: 'inbox', label: 'Inbox', icon: 'inbox', badge: 'inbox' },
+    { to: 'conversations', label: 'Conversations', icon: 'chat', badge: 'talks' },
+    { to: 'board', label: 'Boardroom', icon: 'shield' },
+    { to: 'news', label: 'World News', icon: 'news' },
+    { to: 'feed', label: 'Cricket Feed', icon: 'feed' },
   ] },
   { section: 'Matchday', items: [
     { to: 'match', label: 'Match Centre', icon: 'match' },
@@ -33,6 +40,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
   ] },
   { section: 'Legacy', items: [
     { to: 'world', label: 'World Cricket', icon: 'world' },
+    { to: 'database', label: 'Player Database', icon: 'squad' },
     { to: 'history', label: 'History', icon: 'history' },
     { to: 'settings', label: 'Save & Settings', icon: 'settings' },
   ] },
@@ -54,6 +62,8 @@ export function Shell({ children }: { children: ReactNode }) {
   const o = overview.data;
   const club = o?.club;
   const collapsed = prefs.sidebarCollapsed;
+  const cwc = o?.clubWorld;
+  const badgeOf = (n: NavItem) => (n.badge === 'inbox' ? cwc?.unread ?? 0 : n.badge === 'talks' ? cwc?.talks ?? 0 : 0);
 
   const navList = (mini: boolean) => (
     <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Sections">
@@ -66,8 +76,14 @@ export function Shell({ children }: { children: ReactNode }) {
                 <NavLink end={n.to === ''} to={`/c/${id}/${n.to}`} title={mini ? n.label : undefined}
                   className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${mini ? 'justify-center px-2' : ''} ${
                     isActive ? 'bg-lime/10 text-lime' : 'text-ink-muted hover:bg-obsidian-800 hover:text-ink'}`}>
-                  <Icon name={n.icon} />
-                  {!mini && n.label}
+                  <span className="relative">
+                    <Icon name={n.icon} />
+                    {mini && badgeOf(n) > 0 && <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-lime" aria-hidden />}
+                  </span>
+                  {!mini && <span className="flex-1">{n.label}</span>}
+                  {!mini && badgeOf(n) > 0 && (
+                    <span className={`num rounded-full px-1.5 text-[10px] font-bold ${n.badge === 'inbox' && cwc?.urgent ? 'bg-danger text-white' : 'bg-lime text-obsidian-950'}`} aria-label={`${badgeOf(n)} new`}>{badgeOf(n)}</span>
+                  )}
                   {mini && <span className="sr-only">{n.label}</span>}
                 </NavLink>
               </li>

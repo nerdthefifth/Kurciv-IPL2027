@@ -1,19 +1,24 @@
 import type { Club, Coach, CountryCode, Difficulty, Player, WorldState } from '@kurciv/domain';
 import { emptyStatLine } from '@kurciv/domain';
 import { CLUB_SEEDS, LEAGUES, VENUES, WORLD, leagueById } from '@kurciv/config';
-import { CURATED_PLAYERS, expandCurated, generatePlayer } from '@kurciv/data-ingestion';
+import { CURATED_PLAYERS, expandCurated, generatePlayer, playerDatabase, playerFromDb } from '@kurciv/data-ingestion';
 import { Rng } from '@kurciv/simulation';
 import { defaultTactics } from '@kurciv/ai';
 import { advanceCascade, setupAuctions } from './auction';
 import { roleDemand } from './auction-live';
 import { addTimeline, storyAuctionEve } from './story';
+import { emptyClubWorld } from './clubworld/core';
+import { primeClubWorld } from './clubworld/sync';
 import { addNews } from './util';
 
 /** Typical depth of domestic T20 talent by country (mean overall of a generated pro). */
-export const COUNTRY_DEPTH: Record<CountryCode, number> = {
+export const COUNTRY_DEPTH: Partial<Record<CountryCode, number>> = {
   IND: 61, AUS: 61, ENG: 60, SA: 59, PAK: 59, NZ: 57, WI: 57, SL: 56, BAN: 55, AFG: 56, UAE: 49, USA: 51, OMA: 47, CAN: 47,
   IRE: 52, SCO: 50, NED: 51, ZIM: 52, NEP: 51, NAM: 50,
 };
+
+/** Depth for any nation (associates without a listed value are shallow). */
+export const depthOf = (c: CountryCode) => COUNTRY_DEPTH[c] ?? 45;
 
 export interface CustomClubInput {
   name: string;
@@ -89,7 +94,7 @@ export function createWorld(input: CreateCareerInput): WorldState {
     records: { highestTeamTotal: null, lowestTeamTotal: null, highestScore: null, bestBowling: null, mostCareerRuns: null, mostCareerWickets: null },
     rivalries: {}, freeAgents: [], counter: 0, settings: { autoPlayUserMatches: false, reducedMotion: false },
     scouting: { userBattingVsPace: [], userBattingVsSpin: [] }, pendingDecisions: [],
-    stories: [], timeline: [], chronicles: [], storyKeys: {}, appearances: {}, matchImpacts: {},
+    stories: [], timeline: [], chronicles: [], storyKeys: {}, appearances: {}, matchImpacts: {}, clubWorld: emptyClubWorld(),
   };
 
   for (const l of LEAGUES) {
@@ -122,9 +127,19 @@ export function createWorld(input: CreateCareerInput): WorldState {
   }
 
   // ---------------- players: curated real identities + clearly-labelled generated pros
-  for (const row of CURATED_PLAYERS) {
-    const p = expandCurated(row, season);
+  // The player database: curated real players, real players from the licensed Cricsheet data
+  // (estimated ratings, clearly labelled) and generated players. The game's competitions are
+  // men's competitions, and registration needs a known nationality.
+  for (const rec of playerDatabase()) {
+    if (rec.gender !== 'male') continue;
+    if (rec.kind === 'real' && rec.estimates !== 'curated' && (rec.status !== 'active' || !rec.country || rec.nationality === 'unknown')) continue;
+    const p = playerFromDb(rec, season);
     w.players[p.id] = p;
+  }
+  for (const row of CURATED_PLAYERS) {
+    // Curated players are always present (a few are outside the database's match window).
+    const p = expandCurated(row, season);
+    w.players[p.id] ??= p;
   }
   let serial = 0;
   const curatedBy = (c: CountryCode) => Object.values(w.players).filter((p) => p.country === c).length;
@@ -132,7 +147,7 @@ export function createWorld(input: CreateCareerInput): WorldState {
     const g = rng.fork(`gen-${country}`);
     for (let i = 0; i < count; i++) {
       const age = Math.round(Math.max(18, Math.min(36, g.normal(26, 4))));
-      const p = generatePlayer(g, { country, quality: COUNTRY_DEPTH[country], age, season }, ++serial);
+      const p = generatePlayer(g, { country, quality: depthOf(country), age, season }, ++serial);
       w.players[p.id] = p;
     }
   };
@@ -159,6 +174,7 @@ export function createWorld(input: CreateCareerInput): WorldState {
     body: `${w.auctionOrder.length} leagues will auction in order of reputation, starting with the ${leagueById(w.auctionOrder.map((a) => w.auctions[a].leagueId)[0]).name}.`,
     clubIds: [], playerIds: [], sourceRef: 'season-start', importance: 2,
   });
+  primeClubWorld(w);
   return w;
 }
 

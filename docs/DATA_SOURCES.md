@@ -60,3 +60,29 @@ Never scrape arbitrary sites or hotlink images without permission, and never ass
 - Real players' 2027 club affiliations are unknown, so every career starts with a full auction. Nobody is pre-assigned to a franchise.
 - Birth years may be off by a year for some players.
 - International call-ups are not modelled. Players are available to their clubs all season.
+
+## Player database (Cricsheet)
+
+The player database (`packages/data-ingestion/data/player-db.json`, game form `player-db.game.json`) is built by
+`npm run ingest` (`tools/ingest-cricsheet.ts`; add `--download` to refresh the source files).
+
+- **Source:** [Cricsheet](https://cricsheet.org) match data and people register, made available under the
+  [Open Data Commons Attribution License 1.0](https://opendatacommons.org/licenses/by/1-0/). This product uses Cricsheet data; every record keeps its Cricsheet id as provenance.
+- **Facts taken from the data:** identity and name variants, gender, teams and competitions, formats, first/last appearance (2024–2026 window) and the real-world record for that window.
+- **Nationality:** verified from international appearances in any year Cricsheet publishes; otherwise inferred from strictly domestic competitions of a single country (or IPL-only careers, since Indian players may not play overseas leagues); otherwise unknown. Cricsheet publishes no Afghanistan matches, so Afghan players are verified only through the curated list.
+- **Estimated (game data, labelled in the UI):** ratings (calibrated against the curated editorial ratings), bowling style, batting hand and age — Cricsheet does not record these.
+- **Generated players** complete the database to 10,000 records and are marked as fictional.
+- The current validation report is in `docs/PLAYER_DB_REPORT.md`.
+
+
+## 3D player models
+
+The 3D match view uses **"Cricketers Pack (Low Poly)" by P3D Labs**, published on Sketchfab
+(https://sketchfab.com/3d-models/cricketers-pack-low-poly-a16e3f072a714e2ab382d036c42ab3a6)
+under the Creative Commons Attribution 4.0 licence. The file is bundled as
+`apps/web/public/models/cricketers.glb`.
+
+Changes made: the static meshes are rigged at load time (a generated skeleton with weights
+assigned by body region), and the kit textures are repainted per franchise in the team's
+colours with its short name. The original country kits are not used. Credit is shown in the
+match view.

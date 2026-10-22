@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/dist
+/test-results
+/playwright-report
+/e2e
+/Cricketers.blend
+/Cricketers.fbx
+/Cricketers.obj
+/Cricketers.glb
+/packages/data-ingestion/data/player-db.json
+/packages/data-ingestion/data/cache
+/data/cache
+*.log

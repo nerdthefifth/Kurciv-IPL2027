@@ -1,8 +1,8 @@
-import type { BowlingPlan, FieldPoint } from '@kurciv/domain';
+import type { BowlingPlan } from '@kurciv/domain';
 import { isSpin } from '@kurciv/domain';
 import {
-  BUILT_IN_FIELDS, POSITIONS, STRIKER, currentInnings, eligibleBowlers, hash01, insideCircle, phaseOf, playerById, team, validateField, zoneOf,
-  type Captain, type DeliveryEvent, type FieldSetting, type InningsState, type MatchPlayer, type MatchState, type Side,
+  currentInnings, eligibleBowlers, hash01, phaseOf, playerById, team,
+  type Captain, type DeliveryEvent, type InningsState, type MatchPlayer, type MatchState, type Side,
 } from '@kurciv/simulation';
 
 /**
@@ -126,76 +126,16 @@ export function planFor(spin: boolean, phase: 'powerplay' | 'middle' | 'death', 
   return { lengths: { good: 4, back: 3, full: 2, short: 1 }, lines: { off: 5, stumps: 4, wide: 1 }, variation: 0.25, pace: 'normal' };
 }
 
-function chooseTemplate(s: MatchState, side: Side, inn: InningsState, spin: boolean): string {
-  const rules = s.setup.rules;
-  const phase = phaseOf(inn, rules.powerplayOvers, rules.overs);
-  if (s.setup.userSide === side) return s.setup[side].tactics.fieldTemplateByPhase[phase];
-  const striker = playerById(s, inn.strikerId);
-  const newBatter = inn.batters[striker.id].balls < 3;
-  if (phase === 'powerplay') {
-    if (spin) return 'pp-spin';
-    const attack = inn.legalBalls < 18 || (inn.target !== null && inn.target - inn.runs > 150);
-    return attack ? 'pp-attack' : 'pp-control';
-  }
-  if (inn.target !== null) {
-    const need = inn.target - inn.runs;
-    const left = inn.maxBalls - inn.legalBalls;
-    if (need / Math.max(1, left) < 1.05 && phase !== 'death') return 'chase-defend';
-  }
-  if (newBatter && phase === 'middle' && !spin && s.setup[side].tacticalQuality > 0.5) return 'new-batter';
-  if (phase === 'death') return spin ? 'boundary' : 'death-yorker';
-  return spin ? 'mid-spin' : 'mid-pace';
-}
-
-/** Move a boundary rider into a zone that has been leaking runs (gap exploitation counter). */
-function plugGaps(s: MatchState, side: Side, inn: InningsState, positions: FieldPoint[]): { positions: FieldPoint[]; moved: boolean } {
-  const q = s.setup[side].tacticalQuality;
-  if (q < 0.35) return { positions, moved: false };
-  const zoneOfPoint = (p: FieldPoint) => zoneOf((Math.atan2(p.x, p.y - STRIKER.y) * 180) / Math.PI);
-  const deepIdx = positions.map((p, i) => ({ p, i })).filter((x) => !insideCircle(x.p));
-  if (!deepIdx.length) return { positions, moved: false };
-  const covered = new Set(deepIdx.map((x) => zoneOfPoint(x.p)));
-  let leakZone = -1;
-  let leak = 0;
-  inn.zoneRuns.forEach((r, z) => {
-    if (!covered.has(z) && r > leak) {
-      leak = r;
-      leakZone = z;
-    }
-  });
-  if (leakZone < 0 || leak < 14 - q * 4) return { positions, moved: false };
-  // take the deep fielder whose zone has conceded least
-  deepIdx.sort((a, b) => inn.zoneRuns[zoneOfPoint(a.p)] - inn.zoneRuns[zoneOfPoint(b.p)]);
-  const donor = deepIdx[0];
-  const target = Object.values(POSITIONS).find((p) => !insideCircle(p) && zoneOfPoint(p) === leakZone);
-  if (!target) return { positions, moved: false };
-  const next = positions.map((p, i) => (i === donor.i ? { ...target } : p));
-  const legal = validateField(next, 'R', { powerplay: false, maxOutsidePP: s.setup.rules.maxOutsidePP, maxOutside: s.setup.rules.maxOutside });
-  return legal.legal ? { positions: next, moved: true } : { positions, moved: false };
-}
-
-function overStart(s: MatchState, side: Side): { field?: FieldSetting; plan?: BowlingPlan; mirror?: boolean } {
+function overStart(s: MatchState, side: Side): { plan?: BowlingPlan } {
   const inn = currentInnings(s)!;
+  // The plan depends on who bowls; before the bowler is chosen there is nothing to adjust.
+  if (!inn.currentBowlerId) return {};
   const bowler = playerById(s, inn.currentBowlerId!);
   const spin = isSpin(bowler.bowlType);
-  const rules = s.setup.rules;
-  const phase = phaseOf(inn, rules.powerplayOvers, rules.overs);
-  const tmplId = chooseTemplate(s, side, inn, spin);
-  const tmpl = s.setup[side].fields.find((f) => f.id === tmplId) ?? BUILT_IN_FIELDS.find((f) => f.id === tmplId)!;
-  let positions = tmpl.positions.map((p) => ({ ...p }));
-  let name = tmpl.name;
-  if (phase !== 'powerplay') {
-    const plugged = plugGaps(s, side, inn, positions);
-    positions = plugged.positions;
-    if (plugged.moved) name = `${tmpl.name} (adjusted)`;
-  }
+  const phase = phaseOf(inn, s.setup.rules.powerplayOvers, s.setup.rules.overs);
   const striker = playerById(s, inn.strikerId);
   const plan = s.setup.userSide === side && phase !== 'death' ? { ...s.setup[side].tactics.bowlingPlan } : planFor(spin, phase, striker);
-  return {
-    field: { templateId: tmpl.id, name, positions, keeperUp: spin },
-    plan,
-    mirror: s.setup.userSide === side ? s.setup[side].tactics.mirrorForLeftHanders : true,
-  };
+  return { plan };
 }
 
 function battingIntent(s: MatchState, side: Side, batterId: string): number {

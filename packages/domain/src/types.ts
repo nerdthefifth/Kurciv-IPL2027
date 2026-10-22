@@ -14,9 +14,9 @@ export const SPIN_TYPES: BowlingType[] = ['OB', 'LB', 'SLA', 'SLC'];
 export const isPace = (t: BowlingType) => PACE_TYPES.includes(t);
 export const isSpin = (t: BowlingType) => SPIN_TYPES.includes(t);
 
-export type CountryCode =
-  | 'IND' | 'AUS' | 'ENG' | 'PAK' | 'SA' | 'NZ' | 'SL' | 'BAN' | 'WI' | 'AFG'
-  | 'IRE' | 'ZIM' | 'NED' | 'SCO' | 'USA' | 'NEP' | 'UAE' | 'NAM' | 'OMA' | 'CAN';
+export type { CountryCode } from './countries';
+import type { ClubWorld } from './clubworld';
+import type { CountryCode } from './countries';
 
 /** All attributes use a 0–100 internal scale unless stated otherwise. */
 export interface BattingAttributes {
@@ -70,7 +70,8 @@ export interface PlayerAttributes {
   phys: PhysicalAttributes;
 }
 
-export type PlayerSource = 'curated' | 'generated' | 'youth';
+/** curated: hand-curated real player; registry: real player from the licensed database with estimated ratings. */
+export type PlayerSource = 'curated' | 'registry' | 'generated' | 'youth';
 
 export interface StatLine {
   matches: number;
@@ -172,6 +173,19 @@ export interface Player {
   personality: 'professional' | 'ambitious' | 'temperamental' | 'loyal' | 'easygoing';
   benchStreak: number;
   transferRequest: boolean;
+  /** Real-world identity facts and record from the player database (never mixed with in-game stats). */
+  realWorld?: RealWorldInfo;
+}
+
+export interface RealWorldInfo {
+  nationality: 'verified' | 'inferred' | 'unknown';
+  /** How the playing styles and age were obtained: curated public facts, or game estimates. */
+  styles: 'curated' | 'estimated';
+  cricsheetId: string | null;
+  lastSeen: string | null;
+  competitions: string[];
+  /** Matches in the database window (Cricsheet, 2024–2026). */
+  record: { matches: number; runs: number; balls: number; outs: number; fours: number; sixes: number; wickets: number; ballsBowled: number; runsConceded: number; catches: number; stumpings: number } | null;
 }
 
 export type AuctionPersonality =
@@ -284,6 +298,8 @@ export interface Club {
   retentionChoices: Id[];
   /** User-picked XI in batting order (null = let the assistant pick). */
   lineup: string[] | null;
+  /** This season's leaders (chosen each season; confirmed once the user has picked). */
+  captaincy?: { season: number; captainId: string | null; viceCaptainId: string | null; confirmed: boolean };
 }
 
 // ---------------------------------------------------------------- fields
@@ -621,6 +637,12 @@ export interface NewsItem {
   /** The domain event this headline is generated from (fixture id, ledger id, ...). */
   sourceRef: string;
   importance: 1 | 2 | 3;
+  /** The Club World event this article covers, when it came from the event bus. */
+  eventId?: string;
+  /** Coverage depth: a brief, a full article, or a feature. */
+  level?: 'brief' | 'article' | 'feature';
+  /** An earlier article this one follows up. */
+  followUpOf?: string;
 }
 
 export interface SeasonAward {
@@ -769,6 +791,8 @@ export interface WorldState {
   appearances: Record<string, string[]>;
   /** Finalised consequences of each of the user's matches, captured when the result was applied. */
   matchImpacts: Record<string, MatchImpact>;
+  /** Inbox, news events, conversations, promises, boardroom, media and the cricket feed. */
+  clubWorld: ClubWorld;
 }
 
 export interface StandingSnapshot {
