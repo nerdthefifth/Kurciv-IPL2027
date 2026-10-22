@@ -1,59 +1,53 @@
 # Deployment
 
-Kurciv runs as a single Node.js process that serves the API and the built web app, with SQLite on local disk.
+Kurciv is a **static web app**. The game engine runs in a Web Worker in the player's browser and careers are stored in that browser's IndexedDB, so there is no server, database or secret to configure. Any static host works.
 
-## Environment variables
+**Live site:** <https://kurciv-ipl-2027.vercel.app/> (Vercel project `kurciv-ipl-2027`)
 
-| Variable | Default | Purpose |
+## Vercel (current hosting)
+
+The repository is set up for Vercel with two files at the root.
+
+`vercel.json`:
+
+| Setting | Value | Why |
 | --- | --- | --- |
-| `PORT` | `8787` | HTTP port |
-| `KURCIV_DB` | `./data/kurciv.db` | SQLite file (WAL mode). Put it on persistent storage. |
-| `NODE_ENV` | — | `production` adds the `Secure` flag to session cookies (serve over HTTPS) |
-| `TRUST_PROXY` | `0` | Set to `1` behind a reverse proxy so per-IP rate limiting sees real client IPs |
-| `KURCIV_IMAGE_MANIFEST` | — | Optional licensed-portrait manifest (see DATA_SOURCES.md) |
+| `installCommand` | `npm install` | Installs all workspaces |
+| `buildCommand` | `npm run build` | Builds `apps/web` with Vite |
+| `outputDirectory` | `apps/web/dist` | The static site |
+| `rewrites` | everything → `/index.html` | Client-side routes such as `/c/<career>/match` load the app (real files are served first) |
+| `headers` | long-lived cache for `/assets/*`, one week for `/models/*` | Built assets have content-hashed names |
 
-See `.env.example`. No secrets are required. Session tokens are random, stored server-side and sent as httpOnly, SameSite=Lax cookies.
+`.vercelignore` keeps the upload small. It excludes `node_modules`, test output, the Cricsheet download cache (`/data/cache`, which includes a 127 MB zip, over Vercel's 100 MB per-file limit) and the source model files in the repository root. Entries are anchored with `/`. On Windows, an unanchored `Cricketers.glb` also matched the game's `apps/web/public/models/cricketers.glb`.
 
-## Single server (VM, container, PaaS with a volume)
+### Deploying from your machine
+
+```bash
+npx vercel login                                   # once
+npx vercel deploy --prod --project kurciv-ipl-2027 # from the repository root
+```
+
+The first deploy of a new copy can use `--create-if-missing` to create the project. Vercel builds remotely; a production build takes about a minute.
+
+### Deploying from GitHub
+
+To deploy on every push instead, connect the repository in the Vercel dashboard (Project → Settings → Git). No extra configuration is needed, because the settings above come from `vercel.json`.
+
+## Other static hosts
 
 ```bash
 npm ci
-npm run build
-NODE_ENV=production KURCIV_DB=/var/lib/kurciv/kurciv.db PORT=8787 npm start
+npm run build    # → apps/web/dist
 ```
 
-Put it behind a TLS-terminating reverse proxy (Caddy, nginx, or the platform router) and set `TRUST_PROXY=1`. Health check: `GET /healthz`.
+Serve `apps/web/dist` and rewrite unknown paths to `index.html` so client-side routes work, for example a Netlify `_redirects` file containing `/* /index.html 200`. The build must be served over HTTPS (or `localhost`) for IndexedDB and module workers to work in every browser.
 
-Minimal Dockerfile:
+## What players should know
 
-```dockerfile
-FROM node:22-slim
-WORKDIR /app
-COPY . .
-RUN npm ci && npm run build
-ENV NODE_ENV=production KURCIV_DB=/data/kurciv.db PORT=8787 TRUST_PROXY=1
-VOLUME /data
-EXPOSE 8787
-CMD ["npm", "start"]
-```
+- **Saves are per browser.** Clearing site data deletes careers. Use **Save & Settings → Export backup** to download a career file, and import it from the **Saves** screen to restore it on another device or browser.
+- **Updates are safe for saves.** Save files carry a schema version and older careers are migrated on load (see [DATABASE.md](DATABASE.md)).
+- **3D needs WebGL.** Without it, the match screen falls back to the 2D scoreboard with every control still available.
 
-## Backups
+## Size
 
-SQLite in WAL mode can be backed up live with `sqlite3 kurciv.db ".backup backup.db"`, or by copying the file while the server is stopped. Everything is gzip-compressed. A career's world state is about 0.2 MB, and full ball-by-ball records of every match in the world add roughly 11–12 MB per career-season (about 520 matches at around 22 KB each).
-
-## Scaling beyond one process
-
-The server keeps a small in-memory cache of recently used careers and serialises mutations per career in-process. To run several instances:
-
-1. Move persistence to PostgreSQL using the mapping in [DATABASE.md](DATABASE.md). The optimistic `version` check already protects against concurrent writers; keep it.
-2. Route each career to one instance (sticky by career ID), or remove the cache and rely on the version check alone.
-3. Replace local accounts (`apps/server/src/auth.ts`) with an established identity provider (OIDC). The rest of the server only reads `req.userId`.
-4. Move long-running season simulation to a job queue (e.g. Redis-backed) if request timeouts become a problem. A full world season takes about 10–20 s of CPU.
-
-## Security checklist
-
-- All inputs are validated with zod; request bodies are capped at 256 KB.
-- Every career route checks ownership; foreign IDs return 404.
-- Auth endpoints are rate-limited (20 requests per minute per IP).
-- `X-Content-Type-Options`, `X-Frame-Options: DENY` and `Referrer-Policy` headers are set.
-- No API keys are shipped to the browser. The client can never submit match outcomes, only decisions.
+The app shell is about 0.6 MB of JavaScript and the engine worker about 2 MB, which includes the compact player database (all before gzip). The 3D view (three.js and the scene, about 0.65 MB, roughly 170 KB gzipped) and the 2 MB player model are only downloaded when a match is opened in 3D.

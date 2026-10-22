@@ -1,70 +1,115 @@
 # Kurciv IPL 2027
 
-A browser-based cricket management simulator. You run one club in one domestic league. Every other club, league, auction and match in a persistent world is run by AI, through the same ball-by-ball T20 engine you play with.
+**A T20 cricket management game that runs entirely in your browser.**
 
-- **Ball-by-ball T20 engine.** Every delivery resolves line, length, shot choice, contact quality and ball flight. Each fielder has reaction time, running speed and reach, catches have hang time, and runs depend on how long the throw takes against how fast the batters run. Pressure, dew, pitch wear and DRS are included. The engine is seeded and replayable: the same seed and the same decisions give the same match.
-- **Live field editor.** Fielders' positions physically change outcomes. Moving a fielder changes which balls get stopped or caught. Illegal fields are flagged and called no-ball; your fielders are never moved for you.
-- **Global auction cascade.** Leagues auction in descending reputation, starting with the IPL. AI clubs value players by the marginal improvement to their squad, role scarcity, their purse plan and a strategic personality, and explain big decisions after each lot closes.
-- **Living world.** 11 leagues and 73 clubs, with fatigue, injuries, morale, form, development, ageing, retirements, youth academies, finances, a board, retentions (maximum 6), news generated from real events, records and a Hall of Fame.
-- **World Club Championship.** Up to 50 clubs qualify. Results move league reputations, which decide future qualification places and auction order.
+**▶ Play it now: [kurciv-ipl-2027.vercel.app](https://kurciv-ipl-2027.vercel.app/)**
 
-> Simulation only. There is no wagering, and simulated results are not predictions of real cricket. Real players appear by name only. Ratings and ages are editorial estimates, and no real statistics are imported. See [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
+You take charge of one franchise in one of 11 leagues. Bid for your squad in a live auction, pick your XI and captain, play every match ball by ball in 3D or simulate it, and manage the people: players who want answers, a board that judges you, and a cricket world that reacts to everything you do. Every other club, auction and match in the world is run by AI through the same engine.
 
-## Quick start (local, no external services)
+![A delivery in the 3D match view, with the broadcast score bar](docs/images/match-3d.jpg)
 
-Requires **Node.js 22.13+** (the built-in `node:sqlite` module is used — no database server needed).
+There is nothing to install and no account to create. Careers are saved in your own browser.
+
+---
+
+## Features
+
+### On the field
+- **Ball-by-ball T20 engine.** Every delivery resolves line, length, shot choice, timing, ball flight, fielding and running between the wickets. Matches are seeded and fully replayable.
+- **Realistic scoring.** Calibrated to about 7–8 runs an over with realistic wickets, dot balls and boundaries, guarded by an automated calibration test. See [docs/BALANCE_REPORT.md](docs/BALANCE_REPORT.md).
+- **3D match view.** Cricketers in your franchise's kit, a stadium with crowd and floodlights, broadcast-style cameras, replays and DRS ball tracking. The 3D view only replays what the engine decided, so it can never change a result. A 2D scoreboard view is available, and is used automatically when 3D isn't supported.
+- **You make the calls.** Toss, openers, every bowler, every incoming batter, batting approach and DRS reviews. Play continuously, ball by ball or over by over, or simulate the rest instantly.
+- **Pre-match selection.** Choose your XI and batting order before each match. AI clubs select for the pitch and rest tired players.
+
+### The club
+- **Live auction cascade.** Leagues auction in order of reputation. AI clubs value players by what they add to the squad, plan their purse and explain their big buys.
+- **Captain and vice-captain**, chosen each season.
+- **Squad management:** fatigue, injuries, form, morale, training, youth academy, finances and retentions.
+
+### The world
+- **11 leagues and 73 clubs**, plus a 50-club World Club Championship that moves league reputations.
+- **Orange and Purple Cap** races for every league, with cap holders marked in matches.
+- **Player database** of 10,000 players, built from licensed Cricsheet data.
+
+### Club World
+- **Inbox:** decisions with deadlines from the board, staff, media and players.
+- **Player conversations:** players raise concerns about selection, role, workload, form or their future. Your replies change trust and morale, and promises are tracked and judged on what actually happens.
+- **Boardroom:** objectives, confidence and a published job-security rule.
+- **World News and the Cricket Feed:** a fictional social feed reacting to real in-game events, with rumours that the auction later confirms or denies.
+
+| Inbox | Boardroom | Cricket Feed |
+| --- | --- | --- |
+| ![Inbox](docs/images/inbox.jpg) | ![Boardroom](docs/images/boardroom.jpg) | ![Cricket Feed](docs/images/cricket-feed.jpg) |
+
+> **Simulation only.** There is no wagering, and results are not predictions of real cricket. Real players appear by name. Their ratings are game estimates, while their real-world records come from Cricsheet. Feed accounts and posts are fictional, and real players never "post". See [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
+
+---
+
+## Run it locally
+
+Requires **Node.js 22.13 or newer**.
 
 ```bash
 npm install
-npm run dev          # API on :8787, web app on http://localhost:5173
+npm run dev        # http://localhost:5173
 ```
 
-Open http://localhost:5173, create an account (stored locally), pick a club and start the 2027 auction.
-
-Production-style single process:
+Production build:
 
 ```bash
-npm run build        # builds apps/web/dist
-npm start            # serves API + web app on http://localhost:8787
+npm run build      # outputs apps/web/dist (a static site)
+npm run preview    # serves the build locally
 ```
-
-Data lives in `data/kurciv.db` by default (`KURCIV_DB` overrides it). See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for environment variables.
-
-## Scripts
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | API (tsx watch) + Vite dev server with `/api` proxy |
-| `npm test` | Unit, integration, deterministic-replay and API tests (Vitest) |
+| `npm run dev` | Vite dev server |
+| `npm run build` | Production build of the web app |
+| `npm test` | Unit and integration tests (Vitest), including engine calibration |
+| `npm run e2e` | Browser tests (Playwright, Edge channel) |
 | `npm run typecheck` | Strict TypeScript across every package and the web app |
-| `npm run lab -- 2000` | Simulation lab: plays N seeded matches and prints the calibration report |
-| `npm run world-report -- <seed>` | Plays a whole world season and prints auction, tables, WCC and reputation movement |
-| `npm run validate-data` | Validates the curated player seed (duplicates, ranges, role and style consistency) |
+| `npm run lab -- 2000` | Plays N seeded matches and prints a balance report |
+| `npm run world-report -- <seed>` | Plays a whole world season and prints auctions, tables and reputation changes |
+| `npm run ingest -- --download` | Rebuilds the player database from Cricsheet (downloads about 150 MB to `data/cache`) |
+| `npm run validate-data` | Validates the curated player seed |
 
-## Repository layout
+## Deployment
+
+The live site is hosted on Vercel as a static build: <https://kurciv-ipl-2027.vercel.app/>. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for how to deploy your own copy.
+
+## How it's built
+
+TypeScript monorepo (npm workspaces): React 18 + Vite + Tailwind for the UI, three.js for the 3D view, and Dexie (IndexedDB) for saves. The whole game engine runs in a Web Worker, so the interface stays responsive while seasons simulate.
 
 ```
-apps/
-  server/            Express API, sessions, SQLite persistence, live-match host
-  web/               React + Vite + Tailwind client
-packages/
-  domain/            Entity types, derived ratings, squad and registration rules
-  config/            League registry, venues, simulation constants, world/reputation/WCC config, feature flags
-  simulation/        Seeded RNG, field geometry, shot model, ball-by-ball engine, commentary, win probability, pressure
-  ai/                Tactical captain AI, XI selection, match runner and replay
-  world/             Career creation, auction cascade, competitions, calendar, condition, finance, WCC, seasons
-  data-ingestion/    Curated real-player seed, generated players, validation, licensed-image manifest
-tools/               Simulation lab, world report
-docs/                Architecture, database, configuration, data sources, deployment, balance report, roadmap
+apps/web/              React client, 3D match view (pages/match/three), engine Web Worker
+packages/domain/       Entity types, ratings, registration rules, Club World types
+packages/config/       Leagues, clubs, venues, engine constants (SIM), world config
+packages/simulation/   Seeded RNG, field geometry, shot model, ball-by-ball engine, awards, win probability
+packages/ai/           Captain AI, XI selection, match runner and replay
+packages/world/        Career, auctions, competitions, calendar, condition, finance, WCC, seasons,
+                       captaincy and cap races, Club World (event bus, inbox, conversations, board, media)
+packages/app-core/     Storage-agnostic backend (route table), views, match reports, IndexedDB adapter
+packages/data-ingestion/  Curated players, the 10,000-player database, generated players
+tools/                 Simulation lab, world report, Cricsheet ingestion
+e2e/                   Playwright browser tests
+docs/                  Documentation (below)
 ```
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md): module boundaries, authority model, determinism, world ticks
-- [Database](docs/DATABASE.md): current schema, aggregate model, PostgreSQL target schema
-- [Configuration](docs/CONFIGURATION.md): leagues, squad rules, auctions, reputation, qualification, engine constants
-- [Data sources & licensing](docs/DATA_SOURCES.md): what is real, what is generated, and how to add licensed data
-- [Deployment & environment](docs/DEPLOYMENT.md)
-- [Simulation balance report](docs/BALANCE_REPORT.md)
 - [Gameplay guide](docs/GAMEPLAY.md)
-- [Roadmap & known limitations](docs/ROADMAP.md)
+- [Architecture](docs/ARCHITECTURE.md): layers, the worker backend, determinism, the match engine, the Club World event bus, 3D presentation
+- [Persistence](docs/DATABASE.md): saves, IndexedDB tables, backups and migrations
+- [Configuration](docs/CONFIGURATION.md): leagues, squad rules, auctions and engine constants
+- [Simulation balance report](docs/BALANCE_REPORT.md)
+- [Data sources and licensing](docs/DATA_SOURCES.md)
+- [Player database report](docs/PLAYER_DB_REPORT.md)
+- [Deployment](docs/DEPLOYMENT.md)
+- [Roadmap and known limitations](docs/ROADMAP.md)
+
+## Credits and licences
+
+- Player records: [Cricsheet](https://cricsheet.org/), under the Open Data Commons Attribution License (ODC-BY 1.0).
+- 3D players: [Cricketers Pack (Low Poly)](https://sketchfab.com/3d-models/cricketers-pack-low-poly-a16e3f072a714e2ab382d036c42ab3a6) by P3D Labs, under CC BY 4.0. It is rigged and recoloured at load time.
+- Club and league names belong to their owners. This is an unofficial fan project, not affiliated with or endorsed by any league, club or player.

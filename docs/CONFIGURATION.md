@@ -1,6 +1,6 @@
 # Configuration
 
-All game rules are data in `packages/config`. Changing them needs no code changes. Restart the server after editing; existing careers keep the world they were created with, except where a rule is read live (squad rules, auction increments, engine constants).
+All game rules are data in `packages/config`. Changing them needs no code changes. Rebuild (or reload the dev server) after editing; existing careers keep the world they were created with, except where a rule is read live (squad rules, auction increments, engine constants).
 
 ## Leagues — `packages/config/src/leagues.ts`
 
@@ -40,8 +40,11 @@ About 80 constants, grouped:
 | Ball flight | carry and ground-speed formulas |
 | Wickets | chance of hitting the stumps by line, stumping chance, umpire error rates, catch probability |
 | Conditions | dew penalties, fatigue per over, form weight, new-batter penalty |
+| Shot selection | `intentSharpness`, `respectWeight` (how strongly batters respect a well-executed ball) |
+| Match standard | `powerAnchor`, `controlAnchor`, `levelAnchoring`: how far power and accuracy are judged against the standard of the match rather than absolute ratings |
+| Version | `engineVersion`, recorded on every match; bump it when outcomes change |
 
-Change these, then run `npm run lab -- 2000` to see the effect on the distributions in [BALANCE_REPORT.md](BALANCE_REPORT.md).
+Change these, then run `npm test -- calibration` (the guard rails) and `npm run lab -- 2000` (a wider report) to see the effect. See [BALANCE_REPORT.md](BALANCE_REPORT.md).
 
 ## World — `packages/config/src/world.ts` (`WORLD`)
 

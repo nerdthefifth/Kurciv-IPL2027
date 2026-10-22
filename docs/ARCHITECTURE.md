@@ -1,79 +1,93 @@
 # Architecture
 
-## Layers
+Kurciv runs entirely in the browser. The React interface talks to a backend that runs inside a **Web Worker**. That backend owns the game rules, the simulation and the save files, so the interface stays responsive while matches and seasons simulate.
 
 ```
-apps/web  ──HTTP/JSON──▶  apps/server  ──▶  packages/world ──▶ packages/ai ──▶ packages/simulation
- (React client)            (authority)         (career rules)     (decisions)      (ball-by-ball engine)
-                                │                    │                  │                 │
-                                ▼                    └──────────────────┴──▶ packages/domain + packages/config
-                         SQLite (node:sqlite)
+ Main thread                                   Web Worker (apps/web/src/engine/worker.ts)
+┌──────────────────────────────┐   messages   ┌──────────────────────────────────────────────┐
+│ apps/web  (React, Tailwind)  │ ───────────▶ │ packages/app-core  Backend: route table,      │
+│  pages, components           │  api(path)   │   validation, locks, views, match reports     │
+│  3D view (three.js, lazy)    │ ◀─────────── │      │                                        │
+└──────────────────────────────┘    JSON      │      ▼                                        │
+                                              │ packages/world ─▶ packages/ai ─▶ packages/simulation
+                                              │ (career rules)     (decisions)    (ball-by-ball engine)
+                                              │      │                                        │
+                                              │      ▼  packages/domain + packages/config     │
+                                              │ IndexedDB (Dexie) — careers, worlds, matches  │
+                                              └──────────────────────────────────────────────┘
 ```
 
-| Package | Responsibility | Depends on |
-| --- | --- | --- |
-| `domain` | Entity types, derived ratings (`overall`, `battingRating`…), registration rules (`canRegister`, `canAfford`, `validateXI`) | — |
-| `config` | League registry, club seeds, venues, engine constants (`SIM`), world config (`WORLD`), feature flags | domain |
-| `simulation` | Seeded RNG, field geometry and legality, shot catalogue, ball-by-ball engine, pressure model, commentary, win probability | domain, config |
-| `ai` | Tactical captain (bowling changes, fields, plans, intent, batting order, DRS), XI selection, match runner and exact replay | simulation |
-| `world` | Career creation, auction cascade and bidding AI, competitions and standings, calendar, fatigue, injuries, morale, development, finance, board, WCC qualification and reputation, retentions | ai, simulation, data-ingestion |
-| `data-ingestion` | Curated player seed, attribute expansion, generated players, validation, licensed-image manifest | domain, simulation |
-| `apps/server` | Accounts and sessions, ownership checks, validation, transactions, persistence, live-match host, intelligence reports | everything above |
-| `apps/web` | UI only. It imports pure geometry from `simulation` for client-side field previews, but never decides outcomes | simulation, config, domain |
+| Package | Responsibility |
+| --- | --- |
+| `domain` | Entity types, derived ratings (`overall`, `battingRating`…), registration rules (`validateXI`, `canRegister`), countries, Club World types |
+| `config` | League registry, club seeds, venues, engine constants (`SIM`), world configuration, feature flags |
+| `simulation` | Seeded RNG (sfc32), field geometry, shot catalogue, the ball-by-ball engine, DRS evidence, Player of the Match model, win probability, commentary |
+| `ai` | Captain AI (bowling changes, plans, batting intent, order, reviews), XI selection (pitch-aware), match runner and exact replay |
+| `world` | Career creation, auction cascade and bidding AI, competitions, calendar, fatigue, injuries, morale, development, finance, board, World Club Championship, retentions, captaincy, cap races, and the Club World |
+| `data-ingestion` | Curated players, the 10,000-player database built from Cricsheet, generated players, validation |
+| `app-core` | The storage-agnostic `Backend` (a route table such as `GET /careers/:cid/squad`), views, match reports, save portability, and the IndexedDB adapter |
+| `apps/web` | UI only. It sends decisions and renders state; it never decides an outcome |
 
-The simulation and world packages are pure TypeScript with no I/O. The same code runs in tests, the simulation lab, the server and (geometry only) the browser.
+`simulation` and `world` are pure TypeScript with no I/O. The same code runs in unit tests, the simulation lab and the browser worker.
 
-## Authority model
+## The worker backend
 
-The server is authoritative. The client sends decisions: a bid, a field placement, a bowler choice, a retention list. It never sends outcomes. Every mutation:
+The interface calls `api('/careers/<id>/…', { body })`, which posts a message to the worker. The backend validates the request with zod and then either:
 
-1. Is validated with zod.
-2. Is checked for ownership: `CareerStore.load` returns 404 unless the session user owns the career, whatever ID is requested.
-3. Runs inside a per-career async lock, so mutations never interleave.
-4. Is committed in one `BEGIN IMMEDIATE` transaction, together with any match records it produced, guarded by an optimistic `version` check.
-5. Can carry an `Idempotency-Key`. A retried request returns the stored response instead of re-applying.
+- **reads** a view of the current world, which never changes anything; or
+- **mutates** through `Backend.mutate`, which:
+  1. runs under a per-career lock, so changes never interleave;
+  2. applies the change to the in-memory world, discarding that copy if anything throws;
+  3. runs the Club World observer (`clubWorldSync`) to turn what just happened into events;
+  4. commits the world, metadata and any new match records in **one IndexedDB transaction**, guarded by a version number.
 
-If a mutation throws, the in-memory copy of the career is discarded and reloaded from the database, so a half-applied change can never be persisted or observed.
+Live matches have their own slot (`main`, or `lab` for Scenario Lab replays) with a separate version counter. Every step carries the version it was based on, so a stale or duplicate request is rejected instead of being applied twice.
 
-Auctions add a second guard: every action carries the auction `version` it was based on, and a stale action gets a 409. The AI's maximum bids live on the lot server-side and are stripped from every response (`publicAuction`). Its reasoning is revealed only after a lot closes.
+## Determinism
 
-## Determinism and replay
+- A match is a pure function of its setup, seed, logged decisions and the controller timeline (who was in charge of each side when).
+- The RNG state is part of `MatchState`, so a saved live match resumes on exactly the same random stream.
+- AI decisions use visible state and seeded hashes, never `Math.random()`.
+- World events draw from `worldRng(w, label)`, derived from the career seed, the season and a label. The same seed and the same decisions give the same world.
+- Every stored match keeps its seed and `engineVersion` (currently `kurciv-t20-1.3.0`).
 
-- A match is a pure function of `(MatchSetup, seed, logged user actions, controller timeline)`.
-- The RNG (sfc32) state is part of `MatchState`, so a saved live match resumes on exactly the same random stream.
-- AI decisions use the visible state and seeded hashes, never `Math.random()`.
-- `replayMatch` (packages/ai) re-applies logged actions at their delivery sequence numbers. The test suite checks that a manually played match replays bit-for-bit.
-- World events use `worldRng(w, label)`, a stream derived from the career seed, the season and the event label. The same seed and the same decisions produce the same world.
-- Every stored match record keeps its seed and `engineVersion`. That is what verified leaderboards would need later.
+## The match engine (`packages/simulation/src/engine.ts`)
 
-## The match engine
+Each delivery is resolved in this order:
 
-Each delivery follows the specification's resolution order:
+1. **Situation.** Phase, the standard field for that phase (mirrored for left-handers; the keeper stands up to spinners), and batting intent from your approach setting or the captain AI.
+2. **Bowler.** Control after spell fatigue, dew, form, pressure and day form. The bowler picks length, line and variation from the bowling plan, and execution decides whether the ball lands as planned, slightly off, or as a loose ball.
+3. **Extras.** Wides, no-balls and free hits.
+4. **Shot selection.** Weighted by how well each shot suits the length and line, the batter's intent and style, gaps in the field, and how good the delivery is: well-executed balls are mostly defended or worked for singles.
+5. **Contact.** A miss (bowled, LBW with umpire error and DRS, stumping, byes), an edge (caught behind or in the slips), or a timing-quality draw driven by the batter-versus-bowler skill gap.
+6. **Ball flight.** Ground shots slow along their path until a fielder (with reaction time, speed and reach) cuts them off or they reach the rope. Lofted shots have carry and hang time against each fielder's catching range. Physical scale (power and accuracy) is judged partly against the standard of the match, so every league plays like T20 at its own level.
+7. **Running.** The time to get the ball back against the batters' running speed and appetite for risk. Tight runs can bring run-outs.
+8. **Bookkeeping.** Scorecard, partnerships, fall of wickets, over summaries, win probability, commentary, and the Player of the Match once the final ball is recorded.
 
-1. **Situation.** Phase, field legality (an illegal field means a no-ball), and the batting intent: the user's slider or the AI captain.
-2. **Bowler.** Control is adjusted for spell fatigue, dew, form, pressure and day form. The bowler picks a length, line and variation from the bowling plan. Execution is checked: perfect, slight miss, or a loose ball.
-3. **Extras.** Wides and no-balls, with free hits.
-4. **Shot selection.** Weighted by how well the shot suits the length and line, the batting intent, the batter's style tags, and gaps in the field the batter can see.
-5. **Contact.** Miss (bowled, LBW with umpire error and DRS, stumping, byes, leg-byes), edge (which slips, keeper and gully can catch), or a contact-quality draw. The skill gap, pitch, movement and pressure all feed in.
-6. **Ball flight.** Ground balls decelerate along a path. Each fielder's reaction, speed and reach decide whether they can intercept, with misfields possible. Aerial balls have carry and hang time against each fielder's running catch radius, including boundary catches.
-7. **Running.** Ball-back time (gather plus throw distance over throwing speed) against the batters' run times and their risk appetite. Tight runs carry a chance of a run-out.
-8. **Bookkeeping.** Scorecard, partnerships, fall of wickets, over summaries with zone-by-zone analysis and runs saved, win probability, and commentary generated from the event itself.
+About 80 tunable constants live in `packages/config/src/simulation.ts` (`SIM`). `packages/ai/src/__tests__/calibration.test.ts` fails if scoring drifts out of the target band (see [BALANCE_REPORT.md](BALANCE_REPORT.md)).
 
-About 80 tunable constants live in `packages/config/src/simulation.ts` (`SIM`) and are calibrated with `npm run lab`. See [BALANCE_REPORT.md](BALANCE_REPORT.md).
+## Club World (`packages/world/src/clubworld/`)
 
-## World ticks
+One event log drives the inbox, news, conversations, promises, boardroom and social feed, so they can never contradict each other.
 
-The calendar is day-based (day of year). `advance(w, mode)`:
+- **Observer (`sync.ts`).** Reads simulation records (completed fixtures, the transfer ledger, injuries, competitions) and emits one event per new record. Cursors and event keys make this idempotent: refreshing or reloading emits nothing new.
+- **Subscribers.** `media.ts` writes news, posts and rumours. `inbox.ts` sends staff mail. `conversations.ts` raises player concerns. `promises.ts` judges promises against team sheets and the ledger. `board.ts` moves confidence and writes reviews.
+- **Delivery.** Items carry an in-game date and appear when the calendar reaches it. Daily work (deadlines, reminders, reviews) runs once per game day.
 
-1. Resolves knockout participants (`winner:` and `loser:` references).
-2. Simulates every AI fixture due today through the engine. It stops if the user has a fixture today, unless the assistant is set to auto-play.
-3. Recovers every player: fatigue, workload decay, injury rehab scaled by the medical facility.
-4. Creates playoffs when a league stage finishes, completes leagues, creates the WCC when all leagues are done, and advances WCC rounds.
+## 3D presentation (`apps/web/src/pages/match/three/`)
 
-All of this is idempotent. A fixture that is already complete throws instead of being applied twice, and the career row's version check prevents double commits.
+The 3D view is lazy-loaded and never decides anything.
 
-The season cycle is retention → auction cascade → pre-season → season → WCC → off-season (awards, development, retirements, youth intake, reputation update, qualification allocation, board review) → next season.
+- **Playback.** When a ball is played, the worker resolves it first. The view then animates the recorded event (line, length, speed, shot, contact, angle, where the ball finished, who fielded it, the dismissal), and only after that does the score update.
+- **Fielders.** `fieldForDelivery` (in the engine) reports exactly where each fielder stood.
+- **Players.** The P3D Labs cricketer mesh is rigged at load time with a generated skeleton, and its bones follow a procedural animation rig. Kits are repainted per franchise.
+- **Performance.** The render loop stops when nothing moves, and the resolution drops if frames slow down.
+- **Fallback.** Without WebGL, the 2D board is used.
 
-## Persistence shape
+## Season cycle
 
-The career is a versioned aggregate (`WorldState`), stored gzip-compressed in SQLite, with separate append-only tables for match records, live matches, audit entries and idempotency keys. [DATABASE.md](DATABASE.md) explains this choice and the normalised PostgreSQL target.
+Retention → auction cascade → pre-season → season (captains named, cap races run) → World Club Championship → off-season (awards, development, retirements, youth intake, reputation, qualification places, board review) → next season.
+
+## Persistence
+
+See [DATABASE.md](DATABASE.md).

@@ -4,62 +4,33 @@
 
 | Data | Source | Status |
 | --- | --- | --- |
-| **342 real player identities** (name, country, approximate birth year, role, batting hand, bowling style, capped flag) | Hand-curated in `packages/data-ingestion/src/curated.ts` from public knowledge | Facts about public sportspeople. Birth years are best-effort and marked `ageConfidence: curated`; the UI flags estimated ages. |
-| Player **ratings** (bat and bowl skill, style tags) | Kurciv editorial estimates | **Not official data.** Labelled as estimates in every player profile. |
-| Player **statistics** | Generated only by this game's simulation | Every career starts all players at zero. No real-world records are imported or shown as history. |
-| Generated players | `generatePlayer` with fictional name pools | Labelled "Gen" in the UI and `source: generated` in data. Not real people; any resemblance is coincidental. |
-| Clubs and competitions | Fictional names (`CLUB_SEEDS`), apart from the league name "Indian Premier League" used by the product title | Club names, colours and codes are original. Edit `config/leagues.ts` to change them. |
-| Venues | Real ground names and approximate dimensions | Factual geography; dimensions are approximate. |
-| Coaches | Fictional initials and surnames | Not presented as real staff. |
-| Portraits | None shipped | Silhouette fallback (see below). |
+| **342 curated player identities** (name, country, birth year, role, batting hand, bowling style) | Hand-curated in `packages/data-ingestion/src/curated.ts` from public knowledge | Facts about public sportspeople. Birth years are best effort and estimated ages are flagged in the UI. |
+| **Player database** of 10,000 records | Built from [Cricsheet](https://cricsheet.org) (ODC-BY 1.0); see below | Real identities and real 2024–26 records. Ratings, styles and ages are estimates and labelled as such. Generated players are marked fictional. |
+| Player **ratings** | Editorial estimates (curated players) or estimates derived from real records (database players) | **Not official data.** Labelled as estimates in player profiles. |
+| In-career **statistics** | Produced only by this game's simulation | Every career starts its statistics at zero. Real-world records are shown separately and never mixed in. |
+| Clubs and competitions | Real franchise and league names, colours and venues | Names belong to their owners. This is an unofficial fan project, not affiliated with or endorsed by any league, club or player. Edit `packages/config/src/leagues.ts` to change them. |
+| Venues | Real ground names with approximate dimensions | Factual geography. |
+| Coaches | Fictional | Not presented as real staff. |
+| Cricket Feed accounts and posts | Generated from in-game events | Fictional. Real players never "post"; only fictional generated players have accounts. |
+| Team badges and player cutouts | [TheSportsDB](https://www.thesportsdb.com) public API, fetched at runtime and cached in the browser | Team badges are trademarks, shown for personal, non-commercial play and credited. Nothing is bundled. |
+| Player and stadium photos | Wikipedia lead images, accepted only when hosted on Wikimedia Commons, fetched at runtime | Author and licence are recorded and shown with each image. |
+| 3D player models | "Cricketers Pack (Low Poly)" by P3D Labs, CC BY 4.0 | Bundled; see below. |
 
-Before any public or commercial release, review the publicity and image-rights position for real player names in your jurisdiction, and for the "IPL" mark. Both can be replaced through configuration without code changes.
+If an image service is unavailable, the game falls back to original crests and silhouettes, so gameplay never depends on it.
 
-## Validation pipeline
+Before any public or commercial release, review the publicity and image-rights position for real player names and the trademark position for league and club names and badges in your jurisdiction. All of them can be replaced through configuration.
 
-`npm run validate-data` (`packages/data-ingestion/src/cli.ts`) checks the curated seed for:
+## Validation
 
-- duplicate identities (slug collisions)
-- implausible ages and out-of-range skills
-- bowlers and all-rounders with no bowling style
-- bad batting hands or capped flags
-
-The test suite runs the same validation.
-
-## Adding licensed portraits
-
-The image layer (`packages/data-ingestion/src/images.ts`) accepts portraits only from a manifest. Each entry must have:
-
-```json
-{
-  "playerId": "p-virat-kohli",
-  "url": "https://…",
-  "sourceUrl": "https://commons.wikimedia.org/wiki/File:…",
-  "attribution": "Photo by … / CC BY-SA 4.0",
-  "licence": "CC BY-SA 4.0",
-  "lastChecked": "2026-10-01"
-}
-```
-
-- Accepted licences: CC0, CC BY x.y, CC BY-SA x.y, Public domain, or `Licensed: <provider and agreement reference>`.
-- URLs must be https. Entries without attribution or a recognised licence are rejected and reported.
-- Point `KURCIV_IMAGE_MANIFEST` at the file. Portraits are applied to new careers.
-- The UI lazy-loads images, shows the attribution as a tooltip, and falls back to the silhouette if an image fails, so a provider outage never affects gameplay.
-
-Never scrape arbitrary sites or hotlink images without permission, and never assume a visible photo may be redistributed.
-
-## Recommended future sources
-
-- **Cricsheet** (https://cricsheet.org): structured ball-by-ball data. Good for calibrating engine distributions (dot%, boundary%, phase scoring) and deriving pace and spin splits. Check its licence and attribution terms before importing. A Cricsheet adapter is on the roadmap. It would feed a separate `PlayerHistoricalStats` table, clearly distinguished from in-career statistics.
-- **A licensed cricket data provider** for verified dates of birth, squads and portraits, behind the same adapter interface. Imports must record source, licence status, import time and confidence, and must not overwrite better-verified records.
-- **Wikimedia Commons** for individually licensed portraits, using the manifest format above.
+`npm run validate-data` (`packages/data-ingestion/src/cli.ts`) checks the curated seed for duplicate identities, implausible ages and out-of-range skills, bowlers and all-rounders without a bowling style, and invalid batting hands or capped flags. The test suite runs the same validation. The player database has its own validation report in [PLAYER_DB_REPORT.md](PLAYER_DB_REPORT.md).
 
 ## Limitations
 
-- Ratings are subjective estimates. Disagreement is expected and they can be edited in `curated.ts`.
+- Ratings are estimates. Disagreement is expected; curated ratings can be edited in `curated.ts`.
 - Real players' 2027 club affiliations are unknown, so every career starts with a full auction. Nobody is pre-assigned to a franchise.
-- Birth years may be off by a year for some players.
+- Some birth years may be off by a year.
 - International call-ups are not modelled. Players are available to their clubs all season.
+- Outside the IPL, database players' estimated ratings leave batters rated below bowlers, which lowers scoring in those leagues (see [BALANCE_REPORT.md](BALANCE_REPORT.md)).
 
 ## Player database (Cricsheet)
 

@@ -1,42 +1,46 @@
 # Roadmap and known limitations
 
-This lists honestly what is built, what is partial, and what is planned. Anything marked planned has no hidden implementation behind the UI.
+This lists what is built, what is partial and what is planned. Anything marked planned has no hidden implementation behind the UI.
 
-## Definition of done (first playable release)
+## Built
 
-| Requirement | Status |
+| Area | Status |
 | --- | --- |
-| Create a career, select or create one club | ✅ Existing club in any of 11 leagues, or a validated custom expansion club |
-| Complete a functioning auction | ✅ Live room, AI bidding, proxy bids, flags, unsold round, cascade |
-| Assemble a valid squad | ✅ All registration rules enforced with explicit reasons |
-| Play or simulate a full T20 season | ✅ Ball-by-ball live, key moments, instant; same engine for every match |
-| Tactical decisions during matches | ✅ Bowlers, fields, plans, intent, order, DRS |
-| Observe AI rival fixtures | ✅ Full scorecards, charts and ball-by-ball for every match in the world |
-| Develop players; injuries and morale | ✅ |
-| Retain up to six players; next season without losing history | ✅ Tested over two full seasons |
-| League reputation evolves from international results | ✅ |
-| Qualification produces a valid tournament of no more than 50 clubs | ✅ Tested allocator and format generator |
-| Scorecards, standings, finances, statistics agree with simulation events | ✅ Scorecards, standings and player statistics are checked against the delivery log by automated tests. Finances are derived from a transaction ledger but have no dedicated reconciliation test yet. |
+| Career | Any club in 11 leagues, or a custom expansion club; local saves with export, import, duplicate and automatic backups |
+| Auction | Live room, AI bidding by squad value, proxy bids, flags, assistant bidding, Skip Auction, unsold round, cascade across leagues, rumours resolved by the auction |
+| Squad | Registration rules with explained refusals, retentions (up to six), free agents and replacements, training, youth academy, finances |
+| Selection | Pre-match XI and batting order; AI selection for the pitch; captain and vice-captain each season |
+| Match | Ball-by-ball T20 engine; toss call; openers, bowler and incoming-batter choices; batting approach; DRS with ball tracking; continuous, ball-by-ball, over and instant simulation |
+| Presentation | 3D match view (rigged cricketers in franchise kits, broadcast cameras, replays, DRS tracking), broadcast score bar, 2D fallback, Post-Match Centre with posters |
+| Competitions | League tables, playoffs, Orange and Purple Cap races per league, the 50-club World Club Championship, league reputations and qualification places |
+| Club World | Inbox, world news, player conversations with tracked promises, boardroom with a published job-security rule, fictional cricket feed, rumours, media requests |
+| Data | 10,000-player database from Cricsheet with nationality evidence and labelled estimates |
+| Quality | Strict TypeScript; unit and integration tests including engine calibration and Player of the Match; Playwright browser tests |
 
 ## Partial
 
-- **Contracts.** One-season deals from the auction, renewed through retention. Multi-year deals, bonuses, clauses and wage negotiation are planned.
-- **Transfers.** Free agents and in-season replacements (user and AI) work. AI-to-AI trades, loans and player-initiated renegotiation are planned (`FEATURE_FLAGS.loans`).
-- **Morale events.** Playing time, results and performance affect morale, and unsettled players flag themselves. Explicit salary-fairness and captain-relationship events are planned.
-- **Auction anticipation.** AI clubs value scarcity and later replacements, plan their purse and reveal reasoning. Explicit modelling of rival clubs' demand is planned.
-- **Images.** A licensed-manifest provider with validation and fallbacks exists. No portrait set ships.
-- **Engine realism.** `pitch.bounce` is defined but unused. The left-arm angle against each batting hand is not modelled separately. Scores spread wider than real T20 (see BALANCE_REPORT.md).
-- **Scenario Lab.** Replays your own recorded matches from any delivery. Replaying AI-vs-AI matches is planned.
-- **Balance.** Calibrated against broad T20 patterns, not yet against an imported ball-by-ball dataset.
+- **Contracts.** One-season deals from the auction, renewed through retention. Multi-year deals, bonuses and wage negotiation are planned.
+- **Transfers.** Free agents and in-season replacements only. AI-to-AI trades and loans are planned (`FEATURE_FLAGS.loans`).
+- **Conversations.** Selection, role, workload, form, retention and broken promises are covered. Captaincy talks, conversations with staff, and relationships between teammates are not.
+- **Board.** Dismissal happens only at a season review. Resigning is not supported.
+- **Rumours.** Auction and unsettled-player rumours only, because there is no in-season transfer market.
+- **3D view.** The players are a stylised low-poly pack with procedural animation, not motion capture. The crowd does not react.
+- **Scenario Lab.** Replays your own recorded matches from any delivery. AI-vs-AI replays are planned.
+
+## Known limitations
+
+- **Saves are per browser.** Nothing syncs between devices; use export and import.
+- **Weaker leagues score low.** Outside the IPL, the database's estimated ratings put batters below bowlers in most XIs, so those leagues score less than their real averages (see [BALANCE_REPORT.md](BALANCE_REPORT.md)). Re-estimating the database ratings would fix it for new careers.
+- **Older matchday browser test.** `e2e/matchday.spec.ts` targets the previous match screen and needs rewriting for the current one.
+- **Field placement is fixed.** The standard field per phase is used and cannot be edited.
+- **Images depend on outside services.** Badges and photos come from TheSportsDB and Wikimedia at runtime; if they are unavailable, original crests and silhouettes are shown.
 
 ## Planned
 
-- **ODI and Test engines** (`odiEngine`, `testEngine` flags). The engine has rule profiles (`MatchRules`), but only T20 is implemented and tested.
-- **National-team mode** as a separate save type. International call-ups and availability windows.
-- **Impact Player rule** (`impactPlayer` flag) and **sealed-bid auctions** (`sealedBids` flag).
+- **ODI and Test engines** (`odiEngine`, `testEngine` flags). The engine has rule profiles, but only T20 is implemented.
+- **National-team mode**, international call-ups and availability windows.
+- **Impact Player rule** (`impactPlayer`) and **sealed-bid auctions** (`sealedBids`).
 - **Weather interruptions** and DLS-style target revision.
-- **Cricsheet adapter** for calibration and historical statistics, kept separate from in-career statistics. A licensed data-provider adapter.
-- **PostgreSQL** persistence and an OIDC login (see DATABASE.md and DEPLOYMENT.md). A job queue for long simulations.
-- **Verified leaderboards** from stored seeds and action logs. The building blocks (deterministic replay, `engineVersion`) exist.
-- **Lighter match records** for AI-vs-AI fixtures (currently about 22 KB per match compressed).
-- **Richer narrative.** Rivalry storylines and press conferences, still built only from real events.
+- **Dataset calibration** of the engine against Cricsheet ball-by-ball distributions.
+- **Cloud saves and sharing** (optional accounts), and verified leaderboards from stored seeds and decision logs.
+- **Lighter match records** for AI-vs-AI fixtures.

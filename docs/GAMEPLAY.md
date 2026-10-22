@@ -1,32 +1,73 @@
 # Gameplay guide
 
-## Your first season
+## Starting a career
 
-1. **Create a career.** Pick any club in any of the 11 leagues, or found a custom club. The world is built and every higher-ranked league's auction runs instantly. Then your own auction opens.
-2. **Auction room.** Each lot shows a scouting card, the current bid, a countdown, and every club's purse, squad size and overseas count.
-   - **Bid** (B) raises by the league increment. **Pass** (P) drops out. **Proxy max** bids for you up to a hidden limit.
-   - Flag ★ players in the queue and use **Skip to flagged** to pass on everything until they come up, or let the **Assistant** bid to your squad's needs.
-   - Every bid is checked: squad size, overseas limits (5, with at most 2 per country), purse, and the reserve you must keep to reach the minimum squad. If a bid is refused, the reason is shown.
-   - After a lot closes, the **Auction intelligence** panel explains why rival clubs spent big or held back.
-3. **Pre-season.** Check **Squad** (fix any rule problems; Transfers can auto-fill to the minimum), save an XI and batting order, and set **Tactics**: batting intent by phase, bowling plan, and field templates by phase. Then press **Start season**.
-4. **The season.** **Continue** advances day by day, simulating every other match in the world, and stops on your match days.
-5. **Match Centre.** Check the pitch report, the dew risk and the Intelligence Room's recommendations, then:
-   - **Play live.** Step a ball (Space), an over (O), to the next key moment (K) or to the end of the innings. Choose each bowler, apply fields (drag fielders, or Tab and use the arrow keys), change the bowling plan, set team or individual batting intent, reorder the batting, and take DRS reviews.
-   - **Quick simulate** plays the same engine instantly, with your assistant using your saved XI and tactics.
-6. **Playoffs and the World Club Championship.** Top finishers qualify for the 50-club WCC. Results there move league reputations.
-7. **Off-season.** Review awards in History, then **Begin off-season**. Players develop, decline and retire, academies take in prospects, reputations and qualification places update, and the board reviews you.
-8. **Retentions.** Keep up to 6 players. Costs follow the league slabs (IPL: 18 / 14 / 11 / 18 / 14 / 11 Cr for capped players, 4 Cr uncapped). Then commit, and the next auction cascade begins.
+1. Open the game and choose **New career**. Pick a competition, then a club (or found a custom club), and give your manager a name.
+2. The world is built: 11 leagues, 73 clubs and about 6,000 players drawn from the player database. Higher-ranked leagues hold their auctions instantly, and then your own auction opens.
 
-## Reading the field
+## The auction
 
-- Lime dots are outside the 30-yard circle. The legality checker counts players outside the circle (2 in the powerplay, 5 after) and leg-side fielders behind square (at most 2).
-- Fields are stored for right-handers and mirrored for left-handers when **Mirror for LHB** is on. If it's off, slips become leg-side fielders against a left-hander and the field may turn illegal.
-- The **Overs** tab shows runs by zone, singles, dots, chances, drops and runs saved for every over. AI captains move boundary riders into zones you keep scoring in.
+- Each lot shows the player, their scouted ratings and estimated value, the current bid and every club's purse and squad needs.
+- **Bid** raises by the league increment, **Pass** drops out, and a **proxy maximum** bids for you up to a hidden limit.
+- Flag players and skip to them, or let your **assistant bid** to your squad's needs. **Skip auction** hands the rest to the assistant.
+- Bids that would break a rule (squad size, overseas limits, purse, or the reserve needed to complete the squad) are refused with the reason shown.
+- Before the auction, journalists publish rumours about who will chase whom. The auction itself confirms or denies each one.
 
-## Managing people
+## Before the season
 
-- **Fatigue** builds ball by ball (fast bowlers fastest) and recovers on rest days. Tired players execute worse and get injured more often, so rotate them.
-- **Morale** rises with wins, playing time and good performances. Players benched for long spells may become unsettled.
-- **Training** intensity trades development speed against recovery and injury risk. Focus areas can be set squad-wide or per player.
-- **Youth academy** prospects show a potential range, not a promise. Promote them to give them minutes.
-- **Finances.** The purse is a league cap; cash is your club's money. Facilities cost cash, and the board freezes spending if confidence falls.
+- **Squad:** fix any registration problems (Transfers can fill the squad to the minimum), and optionally save a default XI and batting order.
+- **Leadership:** each season the assistant suggests a captain and vice-captain, and the inbox asks you to confirm. Choose them on the Squad page; players are listed by leadership rating. The captain leads whenever they play, otherwise the vice-captain does. A strong leader sharpens on-field decisions, and gaining or losing the armband affects morale.
+- **Tactics:** batting intent by phase, the default bowling plan and your review policy.
+- **Start season.** The board sets objectives for the year.
+
+## Match day
+
+**Continue** advances the calendar day by day, simulating every other match in the world, and stops on your match days.
+
+1. **Match Centre:** read the pitch report and the opponent intelligence, then pick your **starting XI and batting order**. Promises you have made to players are flagged next to their names. The opponent's announced XI and their selector's notes are shown alongside.
+2. **Play live** or **Quick simulate** (the same engine, played instantly with your XI).
+3. **Toss:** call heads or tails. If you win, choose to bat or bowl.
+4. **In the match:**
+   - pick your **openers**, every **bowler** and every **incoming batter**;
+   - set your **batting approach** (Auto, Defend, Balanced, Attack or Slog);
+   - decide whether to use **DRS** on close calls.
+5. **Playback:** **HIT** (or Space) bowls one ball. **Auto play** keeps going at your chosen speed. **Finish over** plays the over out. **Sim innings** and **Sim match** finish instantly, with the assistant making the decisions.
+6. **3D or 2D:**
+   - the **3D view** shows each ball with broadcast cameras (Broadcast, Follow ball, Bowler view, Wicket view, Wide stadium), automatic direction, replays and DRS ball tracking;
+   - **Low**, **Medium** and **High** graphics settings trade detail for speed;
+   - **Switch to 2D** for the scoreboard view at any time.
+7. **After the match:** the Post-Match Centre has the full scorecard, charts, the Player of the Match, a match report and shareable poster images.
+
+The score bar shows each side in its own colours. Captains are marked **(c)**, and the current **Orange Cap** (most runs) and **Purple Cap** (most wickets) holders in the competition wear cap icons.
+
+## Club World
+
+- **Inbox.** Decisions are listed first, nearest deadline at the top. Each message links to what it is about, and answering changes the game.
+- **Conversations.**
+  - Players come to you when they are dropped, benched, batting out of position, worn out, struggling for form or thinking about their future.
+  - You can reassure, explain, promise, compromise, challenge, praise or decline. How they react depends on their personality, how much they trust you and whether you have kept your word.
+  - **Promises** are specific (for example "you will start the next match") and judged on the actual team sheets. Breaking one costs trust, and the player will raise it.
+  - The **Relationships** tab shows trust, morale, ambition and professionalism for the whole squad.
+- **Boardroom.** The board's personality depends on the club. Confidence moves with results against expectation, objectives, finances, the dressing room and media pressure.
+  - Warning letters let you commit to an improvement target or ask for patience.
+  - Once per season you can ask for a lower league target, at a confidence cost.
+  - The exact dismissal rule is shown on the page.
+- **World News** covers results, milestones, injuries, auctions and controversies across the world, with filters and follow buttons.
+- **Cricket Feed.** Fictional fans, journalists, analysts, pundits and club accounts react to events. You can follow accounts, mute topics, save posts and track rumours.
+
+## Through the season
+
+- **League:** the table, knockouts and the **Orange and Purple Cap** races for any league, plus the World Club Championship.
+- **Fatigue** builds ball by ball, fast bowlers fastest, and recovers on rest days. Tired players perform worse and get injured more easily.
+- **Morale** rises with wins, playing time and good performances. Long spells on the bench unsettle players.
+- **Training** trades development speed against recovery and injury risk. **Youth academy** prospects show a potential range, not a promise.
+- **Finances:** the purse is a league cap and cash is the club's money. The board freezes spending if confidence falls.
+
+## Off-season
+
+The top finishers qualify for the 50-club **World Club Championship**, whose results move league reputations. In the off-season:
+- awards are given, including the season's Orange and Purple Caps;
+- players develop, decline or retire, and academies take in new prospects;
+- reputations and qualification places update, and the board reviews your season.
+
+Then **retain** up to six players and the next auction cascade begins.
