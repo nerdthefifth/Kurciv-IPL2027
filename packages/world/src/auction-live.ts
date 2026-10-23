@@ -428,8 +428,11 @@ export function liveCommand(w: WorldState, a: AuctionState, cmd: LiveCommand): L
       const acc = live.accelerated;
       if (live.phase !== 'ACCELERATED_SELECTION' || !acc) return { ok: false, error: 'The accelerated round is not being drafted.' };
       const picks = acc.selected.filter((pid) => !w.players[pid].clubId);
+      const minBase = leagueById(a.leagueId).auctionRules.minBase;
       const fresh: AuctionLot[] = picks.map((pid) => {
-        const old = a.lots.find((x) => x.playerId === pid)!;
+        const old = a.lots.find((x) => x.playerId === pid);
+        // Registered players outside the main catalogue have no lot yet: they enter at the minimum base.
+        if (!old) return { id: `${a.id}-${pid}-r2`, playerId: pid, set: 'Accelerated', basePrice: minBase, status: 'pending', bids: [], soldTo: null, price: null, round: 2, userOut: false, flaggedByUser: false };
         return { ...old, id: `${old.id}-r2`, status: 'pending', bids: [], soldTo: null, price: null, round: 2, userOut: false, flaggedByUser: false };
       });
       live.accelerated = null;
