@@ -10,7 +10,7 @@ You take charge of one franchise in one of 11 leagues. Bid for your squad in a l
 
 There is nothing to install and no account to create. Careers are saved in your own browser.
 
----
+-----
 
 ## Features
 
