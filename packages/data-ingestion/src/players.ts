@@ -119,6 +119,34 @@ export function expandCurated(row: CuratedRow, season: number): Player {
 // ------------------------------------------------------------------ generated players
 
 const NAMES: Record<string, { first: string[]; last: string[] }> = {
+  GER: {
+    first: ['Lukas', 'Jonas', 'Felix', 'Maximilian', 'Leon', 'Finn', 'Niklas', 'Tobias', 'Moritz', 'Jan', 'Ahmad', 'Faisal', 'Harmanjot', 'Dylan', 'Talha', 'Venkatraman', 'Michael', 'Sahir'],
+    last: ['Schmidt', 'Weber', 'Fischer', 'Becker', 'Wagner', 'Hoffmann', 'Koch', 'Richter', 'Klein', 'Wolf', 'Schulz', 'Khan', 'Ahmadzai', 'Naqvi', 'Singh', 'Blignaut', 'Ganesh', 'Rowe'],
+  },
+  KEN: {
+    first: ['Collins', 'Rakep', 'Shem', 'Nelson', 'Irfan', 'Alex', 'Peter', 'Dhiren', 'Lucas', 'Gerard', 'Sachin', 'Emmanuel', 'Daniel', 'Brian', 'Kennedy', 'Vraj'],
+    last: ['Obuya', 'Ngoche', 'Odhiambo', 'Otieno', 'Ouma', 'Kamau', 'Mwangi', 'Ochieng', 'Patel', 'Karim', 'Wanjala', 'Oluoch', 'Bhudia', 'Kimani', 'Gondaria'],
+  },
+  UGA: {
+    first: ['Brian', 'Riazat', 'Juma', 'Frank', 'Henry', 'Simon', 'Robinson', 'Cosmas', 'Dinesh', 'Fred', 'Kenneth', 'Bilal', 'Ronak', 'Alpesh', 'Pascal'],
+    last: ['Masaba', 'Miyagi', 'Nsubuga', 'Ssenyondo', 'Obuya', 'Kyewuta', 'Waiswa', 'Achelam', 'Mukasa', 'Kakooza', 'Nakrani', 'Ramjani', 'Murungi', 'Hassan', 'Patel'],
+  },
+  HKG: {
+    first: ['Nizakat', 'Babar', 'Kinchit', 'Aizaz', 'Ehsan', 'Yasim', 'Zeeshan', 'Martin', 'Scott', 'Waqas', 'Jason', 'Wing', 'Anshuman', 'Haroon', 'Adit'],
+    last: ['Khan', 'Hayat', 'Shah', 'Ali', 'Murtaza', 'Chan', 'Wong', 'Lee', 'McKechnie', 'Rath', 'Tse', 'Arshad', 'Gaur', 'Barkat', 'Cheung'],
+  },
+  MAS: {
+    first: ['Virandeep', 'Ahmad', 'Syazrul', 'Sharvin', 'Anwar', 'Muhammad', 'Pavandeep', 'Aminuddin', 'Zubaidi', 'Khizar', 'Syed', 'Vijay', 'Fitri', 'Rizwan'],
+    last: ['Singh', 'Faiz', 'Idrus', 'Muthusamy', 'Rahman', 'Ramli', 'Hassan', 'Ismail', 'Zulkifli', 'Hayat', 'Aziz', 'Unni', 'Sharif', 'Nasir'],
+  },
+  SGP: {
+    first: ['Aman', 'Janak', 'Surendran', 'Vinoth', 'Aritra', 'Anish', 'Rezza', 'Navin', 'Amjad', 'Rohan', 'Arjun', 'Vineet', 'Ahsan', 'Akshay'],
+    last: ['Desai', 'Prakash', 'Chandramohan', 'Baskaran', 'Dutta', 'Paraam', 'Gaznavi', 'Param', 'Mahmood', 'Rangarajan', 'Puri', 'Kumar', 'Tan', 'Lim'],
+  },
+  PNG: {
+    first: ['Assad', 'Tony', 'Kiplin', 'Charles', 'Norman', 'Sese', 'Chad', 'Lega', 'Riley', 'Kabua', 'Hiri', 'Semo', 'Damien', 'Jack', 'Alei'],
+    last: ['Vala', 'Ura', 'Doriga', 'Amini', 'Vanua', 'Bau', 'Soper', 'Siaka', 'Hekure', 'Morea', 'Kila', 'Nao', 'Gavera', 'Raho', 'Reva'],
+  },
   IND: {
     first: ['Aarav', 'Vihaan', 'Arjun', 'Kabir', 'Rohan', 'Aditya', 'Siddharth', 'Karthik', 'Pranav', 'Nikhil', 'Harsh', 'Yash', 'Dev', 'Ishaan', 'Manav', 'Rahul', 'Tanmay', 'Varun', 'Akshay', 'Sahil', 'Omkar', 'Kunal', 'Ritesh', 'Gaurav', 'Parth', 'Sanket', 'Abhay', 'Chirag', 'Vedant', 'Atharva', 'Shivansh', 'Anirudh', 'Mohit', 'Sumeet', 'Lakshay', 'Tushar', 'Nishant', 'Jatin', 'Ruturaj', 'Hemant'],
     last: ['Sharma', 'Verma', 'Patil', 'Iyer', 'Nair', 'Reddy', 'Kulkarni', 'Chauhan', 'Rathore', 'Mishra', 'Pandey', 'Joshi', 'Desai', 'Menon', 'Saini', 'Thakur', 'Bhatt', 'Yadav', 'Rawat', 'Tiwari', 'Gill', 'Sandhu', 'Pillai', 'Shetty', 'Kamath', 'Jadhav', 'More', 'Naik', 'Rana', 'Bisht', 'Dubey', 'Tripathi', 'Hegde', 'Sinha', 'Malhotra'],

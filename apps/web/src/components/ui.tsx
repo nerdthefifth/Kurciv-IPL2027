@@ -327,7 +327,7 @@ export function Slider({ label, value, onChange, min = 0, max = 1, step = 0.05, 
         </label>
         <span className="num text-sm text-lime">{format ? format(value) : value.toFixed(2)}</span>
       </div>
-      <input id={id} type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-[#c6ff1a]" />
+      <input id={id} type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-[rgb(var(--accent))]" />
       {(left || right) && (
         <div className="flex justify-between text-[11px] text-ink-faint">
           <span>{left}</span>

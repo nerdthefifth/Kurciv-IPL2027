@@ -22,6 +22,21 @@ Defaults follow the specification: 25-player squads, 5 overseas, at most 2 per o
 
 `CLUB_SEEDS` lists each league's clubs: name, city, home venue, colours, auction personality and brand. `EXPORT_RESTRICTIONS` limits where a country's players may register. By default Indian players only register in the IPL.
 
+## The universe — `packages/config/src/universe.ts`
+
+| Export | Meaning |
+| --- | --- |
+| `PYRAMID` | Division count (5), clubs per division (18), `promote`/`relegate` (3/3), names, purses, minimum bases, reputations, prize money, `parachuteShare` (0.3), `promotionBonusShare` (0.08) |
+| `DIVISIONS` | The divisions as `LeagueConfig`s (`kind: 'division'`, `tier` 1–5). Pyramid squads: 16–22 players, 6 overseas, 4 in the XI, 3 per country |
+| `FICTIONAL_CLUB_SEEDS`, `FICTIONAL_VENUES` | The 17 invented clubs and their grounds (with visual identity and provenance) |
+| `stadiumCatalogue()` | Every ground: real venues enriched with capacity, climate and identity, plus the fictional grounds |
+| `REGIONS`, `regionOf()` | Asia, Europe, Africa, Americas, Oceania |
+| `domesticOf(club)` | Countries treated as domestic for a club (its national-league group, or its own country) |
+| `exportAllowed()` | Export restrictions; in the pyramid, Indian players may only join Indian clubs |
+| `CONTINENTAL` | Cup sizes, qualification weights (performance 0.7, reputation 0.3), prize money, Global Club Championship size, coefficient points |
+| `PRESEASON` | Friendly window (days 42–76), maximum (4), minimum gap (2 days), reputation weight (0.25), board weight (0.2), AI friendlies per club |
+| `NATIONS`, `INTERNATIONAL` | The 24 nations (full members and associates, colours), squad sizes by format, the preseason window, rating K-factors, the world-event rotation, Test length |
+
 ## Venues — `packages/config/src/venues.ts`
 
 Boundary sizes in metres (straight from the striker, square from the pitch centre), altitude, dew chance, and a pitch profile: `pace`, `spin`, `bounce`, `batting` (each −1 to 1) and `wear` (deterioration per innings). Surface presets are `flat`, `green`, `dry`, `slow` and `balanced`.
@@ -58,7 +73,11 @@ Change these, then run `npm test -- calibration` (the guard rails) and `npm run 
 
 ## Feature flags — `FEATURE_FLAGS`
 
-`impactPlayer`, `sealedBids`, `odiEngine`, `testEngine`, `nationalTeamMode` and `loans` are all `false`. They mark planned systems (see [ROADMAP.md](ROADMAP.md)). Turning one on does not enable unfinished code.
+`odiEngine`, `testEngine` and `nationalTeamMode` are `true`: those systems are built. `impactPlayer`, `sealedBids` and `loans` are `false`; they mark planned systems (see [ROADMAP.md](ROADMAP.md)), and turning one on does not enable unfinished code.
+
+## Match formats — `packages/simulation/src/types.ts`
+
+`T20_RULES`, `ODI_RULES` and `TEST_RULES` (`rulesFor(format)`) set overs, powerplay and death overs, bowler quotas, reviews and super overs. Tests also set `days` (5), `oversPerDay` (90) and `followOn` (200). Format scaling inside the engine (`FORMAT_INTENT`, `FORMAT_RISK`, `FORMAT_SHARPNESS` in `engine.ts`) is tuned with `npm run format-lab`.
 
 ## Difficulty
 

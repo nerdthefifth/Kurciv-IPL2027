@@ -97,7 +97,7 @@ export default function Match3D({ state, last, speed, presenter, settings, onSet
 
   const sel = 'rounded bg-black/55 px-2 py-1 text-xs text-white backdrop-blur hover:bg-black/70';
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#0d1626]">
+    <div className="relative h-full w-full overflow-hidden bg-[#140d10]">
       <div ref={host} className="absolute inset-0" aria-label="3D match view" role="img" />
       <a className="absolute left-2 top-11 text-[10px] text-white/45 hover:text-white/80" href="https://sketchfab.com/3d-models/cricketers-pack-low-poly-a16e3f072a714e2ab382d036c42ab3a6" target="_blank" rel="noreferrer">Players: {MODEL_CREDIT}</a>
       {status && (
@@ -119,6 +119,7 @@ export default function Match3D({ state, last, speed, presenter, settings, onSet
           <option value="low">Low</option>
           <option value="medium">Medium</option>
           <option value="high">High</option>
+          <option value="ultra">Ultra</option>
         </select>
       </div>
     </div>

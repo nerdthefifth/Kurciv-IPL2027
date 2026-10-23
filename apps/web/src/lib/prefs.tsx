@@ -15,7 +15,7 @@ export interface Prefs {
 }
 
 const DEFAULTS: Prefs = {
-  theme: 'dark', sound: true, animations: true, largeBidConfirm: 15, images: true, auctionSpeed: 1, sidebarCollapsed: false, lastCareerId: null, seenLocalDataNotice: false,
+  theme: 'light', sound: true, animations: true, largeBidConfirm: 15, images: true, auctionSpeed: 1, sidebarCollapsed: false, lastCareerId: null, seenLocalDataNotice: false,
 };
 const KEY = 'kurciv.prefs.v1';
 

@@ -33,6 +33,10 @@ import { ClubPage } from './pages/Club';
 import { LabPage } from './pages/Lab';
 import { DatabasePage } from './pages/Database';
 import { BoardPage, ConversationsPage, FeedPage, InboxPage, NewsPage } from './pages/ClubWorld';
+import {
+  AuctionPrepPage, CalendarPage, ClubsDirectoryPage, ContinentalPage, InternationalHubPage, NationalTeamPage, PlayerDirectoryPage, PreseasonPage, PyramidPage,
+  StadiumsPage, UniversePage,
+} from './pages/Universe';
 
 function CareerRoutes() {
   const { cid } = useParams();
@@ -56,7 +60,18 @@ function CareerRoutes() {
             <Route path="finances" element={<FinancesPage />} />
             <Route path="scouting" element={<ScoutingPage />} />
             <Route path="world" element={<WorldPage />} />
-            <Route path="international" element={<InternationalPage />} />
+            <Route path="global" element={<InternationalPage />} />
+            <Route path="international" element={<InternationalHubPage />} />
+            <Route path="universe" element={<UniversePage />} />
+            <Route path="pyramid" element={<PyramidPage />} />
+            <Route path="clubs" element={<ClubsDirectoryPage />} />
+            <Route path="continental" element={<ContinentalPage />} />
+            <Route path="national-team" element={<NationalTeamPage />} />
+            <Route path="preseason" element={<PreseasonPage />} />
+            <Route path="players" element={<PlayerDirectoryPage />} />
+            <Route path="auction-prep" element={<AuctionPrepPage />} />
+            <Route path="stadiums" element={<StadiumsPage />} />
+            <Route path="calendar" element={<CalendarPage />} />
             <Route path="history" element={<HistoryPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="club/:clubId" element={<ClubPage />} />

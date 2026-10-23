@@ -6,6 +6,7 @@ import {
   valuePlayer, finishAuction, auctionEstimate, advanceCascade, categoryOf, closeLot, createLiveState, endRound, escalate, increment, leader, nextBid, openLot, priceScale, roleTargets, validBidFor,
 } from './auction';
 import { clubsInLeague, formatCr, round2, squadOf } from './util';
+import { enterPreseason } from './universe/lifecycle';
 
 /**
  * Real-time auction room. A deterministic state machine driven by elapsed time:
@@ -449,7 +450,7 @@ export function liveCommand(w: WorldState, a: AuctionState, cmd: LiveCommand): L
 /** Runs the user's auction to the end without the room (assistant decides, or user abstains). */
 export function completeCascadeIfDone(w: WorldState): boolean {
   if (advanceCascade(w)) {
-    w.phase = 'preseason';
+    enterPreseason(w);
     return true;
   }
   return false;

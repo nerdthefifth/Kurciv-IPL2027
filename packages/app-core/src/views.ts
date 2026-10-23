@@ -3,9 +3,9 @@ import {
   ageOf, battingAverage, battingRating, bowlingRating, economy, emptyStatLine, fieldingRating, isOverseas, marketValue, overall, potentialRange,
   scoutedRange, strikeRate,
 } from '@kurciv/domain';
-import { COUNTRY_NAMES, leagueById, venueById } from '@kurciv/config';
+import { COUNTRY_NAMES, domesticOf, leagueById, regionOf, venueById } from '@kurciv/config';
 import { autoFor, fieldAssignment, type MatchState } from '@kurciv/simulation';
-import { askingPrice, financeSummary, nextUserFixture, nrr, payrollOf, retentionCost, sortRows, squadOf } from '@kurciv/world';
+import { askingPrice, dutyOf, financeSummary, nextUserFixture, nrr, payrollOf, retentionCost, sortRows, squadOf } from '@kurciv/world';
 
 export function playerView(w: WorldState, p: Player, opts: { detail?: boolean } = {}) {
   const viewer = w.clubs[w.userClubId];
@@ -28,11 +28,16 @@ export function playerView(w: WorldState, p: Player, opts: { detail?: boolean } 
     form: own ? p.form : null, fatigue: Math.round(p.fatigue), morale: own ? Math.round(p.morale) : null,
     injury: p.injury ? { type: p.injury.type, severity: p.injury.severity, daysRemaining: Math.ceil(p.injury.daysRemaining), expected: `${p.injury.expectedDaysMin}–${p.injury.expectedDaysMax} days` } : null,
     clubId: p.clubId, clubShort: club?.shortName ?? null, clubName: club?.name ?? null, isYouth: p.isYouth, retired: p.retired,
-    overseas: isOverseas(p, leagueById(viewer.leagueId).domesticCountries),
+    overseas: isOverseas(p, domesticOf(viewer)),
     contract: p.contract ? { salary: p.contract.salary, acquired: p.contract.acquired, retainedCount: p.contract.retainedCount } : null,
     reputation: p.reputation, marketValue: marketValue(p, w.season), transferRequest: own ? p.transferRequest : false,
     asking: !p.clubId && !p.isYouth ? askingPrice(w, p, viewer) : null,
     image: p.image,
+    fictional: p.source === 'generated' || p.source === 'youth',
+    duty: (() => {
+      const d = dutyOf(w, p.id, w.day);
+      return d ? { nation: w.universe!.international.nations[d.nationId]?.name ?? d.nationId, event: w.universe!.international.events[d.eventId]?.name ?? d.eventId, until: d.toDay } : null;
+    })(),
     season: statView(season),
     career: statView(p.stats.career),
   };
@@ -141,8 +146,8 @@ export function clubView(w: WorldState, c: Club) {
     venue: venueById(c.venueId).name, colors: c.colors, personality: c.personality, isUser: c.isUser, isCustom: c.isCustom,
     purse: c.purse, cash: c.cash, brand: c.brand, fanBase: c.fanBase, elo: c.elo, facilities: c.facilities, coaches: c.coaches,
     board: c.board, dna: c.dna, trophies: c.trophies, squadSize: squad.length,
-    overseas: squad.filter((p) => isOverseas(p, l.domesticCountries)).length,
-    rules: l.squadRules, payroll: payrollOf(w, c),
+    overseas: squad.filter((p) => isOverseas(p, domesticOf(c))).length,
+    rules: l.squadRules, payroll: payrollOf(w, c), tier: l.tier ?? null, region: regionOf(c.country), venueId: c.venueId,
   };
 }
 
@@ -153,6 +158,7 @@ export function fixtureView(w: WorldState, f: Fixture) {
     homeId: f.homeId, awayId: f.awayId, home: f.homeId ? w.clubs[f.homeId]?.shortName : f.homeRef ?? 'TBD', away: f.awayId ? w.clubs[f.awayId]?.shortName : f.awayRef ?? 'TBD',
     homeName: f.homeId ? w.clubs[f.homeId]?.name : 'To be decided', awayName: f.awayId ? w.clubs[f.awayId]?.name : 'To be decided',
     venue: f.venueId ? venueById(f.venueId).name : 'TBD', status: f.status, involvesUser: f.involvesUser,
+    neutral: !!f.neutral, mode: f.mode ?? null, purpose: f.purpose ?? null, kind: comp?.kind ?? 'league',
     result: f.result ? {
       winnerId: f.result.winnerId, margin: f.result.margin, superOver: !!f.result.superOver,
       innings: f.result.innings.map((i) => ({ clubId: i.battingClubId, runs: i.runs, wickets: i.wickets, balls: i.balls })),

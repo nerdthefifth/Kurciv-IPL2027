@@ -12,7 +12,7 @@ export function runToEnd(s: MatchState, ctl: Controllers = { home: 'ai', away: '
   while (s.status !== 'complete') {
     const r = step(s, ctl, AiCaptain);
     if (r.needs) throw new Error(`Manual decision required (${r.needs.kind}) while simulating`);
-    if (++guard > 2000) throw new Error('Match did not terminate');
+    if (++guard > 20000) throw new Error('Match did not terminate');
   }
   return s;
 }

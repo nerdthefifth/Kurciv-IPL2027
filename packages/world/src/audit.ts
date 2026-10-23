@@ -1,6 +1,6 @@
 import type { WorldState } from '@kurciv/domain';
 import { isOverseas } from '@kurciv/domain';
-import { leagueById } from '@kurciv/config';
+import { domesticOf, leagueById } from '@kurciv/config';
 import { clubsInLeague, round2, squadOf } from './util';
 
 export interface ClubAudit {
@@ -36,7 +36,7 @@ export function auditLeague(w: WorldState, leagueId: string, opts: { requireMini
     const purseStart = l.auctionRules.purse;
     const purseExpected = round2(purseStart - retentions - auction - otherSignings);
     const squad = squadOf(w, c);
-    const os = squad.filter((p) => isOverseas(p, l.domesticCountries));
+    const os = squad.filter((p) => isOverseas(p, domesticOf(c)));
     const byCountry: Record<string, number> = {};
     for (const p of os) byCountry[p.country] = (byCountry[p.country] ?? 0) + 1;
     const ci: string[] = [];

@@ -1,6 +1,6 @@
 import type { Club, Fixture, Player, SeasonChronicle, Story, StoryAction, TimelineEntry, WorldState } from '@kurciv/domain';
 import { ageOf, overall, validateXI } from '@kurciv/domain';
-import { leagueById } from '@kurciv/config';
+import { domesticOf, leagueById } from '@kurciv/config';
 import { pickXI } from '@kurciv/ai';
 import type { MatchState } from '@kurciv/simulation';
 import { categoryOf, roleTargets } from './auction';
@@ -311,7 +311,7 @@ function lineupWith(w: WorldState, inId: string, outId?: string): string | null 
   const u = userClub(w);
   const l = leagueById(u.leagueId);
   const squad = squadOf(w, u);
-  let xi = u.lineup ? [...u.lineup] : pickXI(squad, l.squadRules, l.domesticCountries).map((p) => p.id);
+  let xi = u.lineup ? [...u.lineup] : pickXI(squad, l.squadRules, domesticOf(u)).map((p) => p.id);
   if (xi.includes(inId)) return null;
   const pIn = w.players[inId];
   let out = outId && xi.includes(outId) ? outId : undefined;
@@ -320,7 +320,7 @@ function lineupWith(w: WorldState, inId: string, outId?: string): string | null 
     out = same[0]?.id ?? xi.map((id) => w.players[id]).sort((a, b) => overall(a) - overall(b))[0].id;
   }
   xi = xi.map((id) => (id === out ? inId : id));
-  const v = validateXI(xi.map((id) => w.players[id]), u.squad, l.squadRules, l.domesticCountries);
+  const v = validateXI(xi.map((id) => w.players[id]), u.squad, l.squadRules, domesticOf(u));
   if (!v.ok) return v.errors.join(' ');
   u.lineup = xi;
   return null;
@@ -351,7 +351,7 @@ export function applyStoryAction(
       const pid = a.payload!.playerId;
       const l = leagueById(u.leagueId);
       const squad = squadOf(w, u);
-      const xi = u.lineup ? [...u.lineup] : pickXI(squad, l.squadRules, l.domesticCountries).map((p) => p.id);
+      const xi = u.lineup ? [...u.lineup] : pickXI(squad, l.squadRules, domesticOf(u)).map((p) => p.id);
       const p = w.players[pid];
       const bench = squad.filter((x) => !xi.includes(x.id) && !x.injury && categoryOf(x) === categoryOf(p)).sort((x, y) => overall(y) - overall(x))[0]
         ?? squad.filter((x) => !xi.includes(x.id) && !x.injury).sort((x, y) => overall(y) - overall(x))[0];

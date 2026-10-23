@@ -1,8 +1,8 @@
 import type { AuctionState, Player, WorldState } from '@kurciv/domain';
 import { ageOf, canAfford, canRegister, isOverseas, marketValue, overall, reserveNeeded } from '@kurciv/domain';
-import { COUNTRY_NAMES, leagueById } from '@kurciv/config';
+import { COUNTRY_NAMES, domesticOf, leagueById } from '@kurciv/config';
 import { pickXI } from '@kurciv/ai';
-import { AUCTION_TIMING, auditLeague, auctionEstimate, categoryOf, clubsInLeague, leader, nextBid, permittedBids, priceScale, roleDemand, roleTargets, squadOf, valuePlayer } from '@kurciv/world';
+import { AUCTION_TIMING, auditLeague, registerCheck, auctionEstimate, categoryOf, clubsInLeague, leader, nextBid, permittedBids, priceScale, roleDemand, roleTargets, squadOf, valuePlayer } from '@kurciv/world';
 import { playerView } from './views';
 const formatCr = (v: number) => `₹${v.toFixed(2)} Cr`;
 
@@ -25,7 +25,7 @@ function clubCard(w: WorldState, a: AuctionState, clubId: string) {
     .map((x) => CAT_LABEL[x.cat]);
   return {
     id: c.id, name: c.name, shortName: c.shortName, colors: c.colors, isUser: c.isUser, personality: c.personality,
-    purse: c.purse, squad: sq.length, maxSquad: l.squadRules.maxSquad, overseas: sq.filter((p) => isOverseas(p, l.domesticCountries)).length,
+    purse: c.purse, squad: sq.length, maxSquad: l.squadRules.maxSquad, overseas: sq.filter((p) => isOverseas(p, domesticOf(c))).length,
     maxOverseas: l.squadRules.maxOverseas, needs,
     retained: sq.filter((p) => p.contract?.acquired === 'retention' && p.contract.startSeason === w.season).map((p) => ({ id: p.id, name: p.name, salary: p.contract!.salary })),
   };
@@ -65,7 +65,7 @@ export function auctionRoomView(w: WorldState, full = true) {
   if (lot && live && live.phase !== 'ACCELERATED_SELECTION' && live.phase !== 'PREPARATION') {
     const p = w.players[lot.playerId];
     const next = nextBid(l, lot);
-    const reg = canRegister(squadOf(w, user), p, l.squadRules, l.domesticCountries);
+    const reg = registerCheck(w, user, p, l);
     const aff = canAfford(user.purse, next, user.squad.length, l.squadRules, l.auctionRules.minBase);
     const lead = leader(lot);
     const val = valuePlayer(w, a, user, p, a.currentLotIndex);
@@ -90,10 +90,10 @@ export function auctionRoomView(w: WorldState, full = true) {
         const sq = squadOf(w, c);
         const have = sq.filter((x) => categoryOf(x) === cat).length;
         const target = roleTargets(l)[cat];
-        const osLeft = l.squadRules.maxOverseas - sq.filter((x) => isOverseas(x, l.domesticCountries)).length;
+        const osLeft = l.squadRules.maxOverseas - sq.filter((x) => isOverseas(x, domesticOf(c))).length;
         const role = CAT_LABEL[cat].toLowerCase();
         const bits = [have < target ? `short of ${role} (${have}/${target})` : `already ${have} ${role}`, `${formatCr(c.purse)} left`];
-        if (isOverseas(p, l.domesticCountries)) bits.push(`${osLeft} overseas slot${osLeft === 1 ? '' : 's'} open`);
+        if (isOverseas(p, domesticOf(c))) bits.push(`${osLeft} overseas slot${osLeft === 1 ? '' : 's'} open`);
         return { clubId: id, short: c.shortName, reason: bits.join(' · ') };
       }),
       dropped: live.dropped,
@@ -104,7 +104,7 @@ export function auctionRoomView(w: WorldState, full = true) {
         assistantReason: val.reason,
         maxAffordable: Math.max(0, Math.round((user.purse - reserve) * 100) / 100),
         reserve,
-        fit: `${CAT_LABEL[cat]}: you have ${have}, target ${roleTargets(l)[cat]}.${isOverseas(p, l.domesticCountries) ? ` Uses an overseas slot (${squadOf(w, user).filter((x) => isOverseas(x, l.domesticCountries)).length}/${l.squadRules.maxOverseas}).` : ''}`,
+        fit: `${CAT_LABEL[cat]}: you have ${have}, target ${roleTargets(l)[cat]}.${isOverseas(p, domesticOf(user)) ? ` Uses an overseas slot (${squadOf(w, user).filter((x) => isOverseas(x, domesticOf(user))).length}/${l.squadRules.maxOverseas}).` : ''}`,
         alternatives,
         age: ageOf(p, w.season),
       },
@@ -127,7 +127,7 @@ export function auctionRoomView(w: WorldState, full = true) {
         poolSize: a.lots.length,
         unsoldPrevious: Object.values(w.players).filter((p) => !p.clubId && !p.retired && !p.isYouth && p.stats.career.matches > 0).length,
         rules: { ...l.squadRules, purse: l.auctionRules.purse, minBase: l.auctionRules.minBase, increments: l.auctionRules.increments.map((x) => ({ upTo: Number.isFinite(x.upTo) ? x.upTo : null, step: x.step })), timing: AUCTION_TIMING },
-        overseasPool: a.lots.filter((x) => isOverseas(w.players[x.playerId], l.domesticCountries)).length,
+        overseasPool: a.lots.filter((x) => isOverseas(w.players[x.playerId], domesticOf(user))).length,
         countries: Object.entries(a.lots.reduce<Record<string, number>>((acc, x) => {
           const c = w.players[x.playerId].country;
           acc[c] = (acc[c] ?? 0) + 1;
@@ -171,12 +171,12 @@ export function auctionSummary(w: WorldState) {
   const clubs = clubsInLeague(w, l.id).map((c) => {
     const sq = squadOf(w, c);
     const signings = sold.filter((x) => x.soldTo === c.id).map((x) => ({ playerId: x.playerId, name: w.players[x.playerId].name, role: w.players[x.playerId].role, price: x.price!, estimate: est(x.playerId) }));
-    const os = sq.filter((p) => isOverseas(p, l.domesticCountries));
+    const os = sq.filter((p) => isOverseas(p, domesticOf(c)));
     const nat: Record<string, number> = {};
     for (const p of os) nat[p.country] = (nat[p.country] ?? 0) + 1;
     const tgt = roleTargets(l);
     const balance = (Object.keys(tgt) as (keyof typeof tgt)[]).map((k) => ({ label: CAT_LABEL[k], have: sq.filter((p) => categoryOf(p) === k).length, target: tgt[k] }));
-    const xi = sq.length >= 11 ? pickXI(sq, l.squadRules, l.domesticCountries) : sq;
+    const xi = sq.length >= 11 ? pickXI(sq, l.squadRules, domesticOf(c)) : sq;
     const strength = xi.length ? xi.reduce((s, p) => s + overall(p), 0) / xi.length : 0;
     const bestCat = (Object.keys(tgt) as (keyof typeof tgt)[]).map((k) => ({ k, avg: avg(sq.filter((p) => categoryOf(p) === k).map(overall)) })).sort((x, y) => y.avg - x.avg);
     return {

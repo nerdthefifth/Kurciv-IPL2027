@@ -1,7 +1,7 @@
 import type { BowlingPlan } from '@kurciv/domain';
 import { isSpin } from '@kurciv/domain';
 import {
-  currentInnings, eligibleBowlers, hash01, phaseOf, playerById, team,
+  currentInnings, eligibleBowlers, formatOf, hash01, matchBallsUsed, phaseFor, playerById, sideTotals, team,
   type Captain, type DeliveryEvent, type InningsState, type MatchPlayer, type MatchState, type Side,
 } from '@kurciv/simulation';
 
@@ -19,8 +19,7 @@ const noise = (s: MatchState, side: Side, key: string) => {
 };
 
 function bowlerScore(s: MatchState, inn: InningsState, p: MatchPlayer): number {
-  const rules = s.setup.rules;
-  const phase = phaseOf(inn, rules.powerplayOvers, rules.overs);
+  const phase = phaseFor(s, inn);
   const b = p.attrs.bowl;
   const spin = isSpin(p.bowlType);
   const striker = playerById(s, inn.strikerId);
@@ -132,28 +131,62 @@ function overStart(s: MatchState, side: Side): { plan?: BowlingPlan } {
   if (!inn.currentBowlerId) return {};
   const bowler = playerById(s, inn.currentBowlerId!);
   const spin = isSpin(bowler.bowlType);
-  const phase = phaseOf(inn, s.setup.rules.powerplayOvers, s.setup.rules.overs);
+  const phase = phaseFor(s, inn);
   const striker = playerById(s, inn.strikerId);
   const plan = s.setup.userSide === side && phase !== 'death' ? { ...s.setup[side].tactics.bowlingPlan } : planFor(spin, phase, striker);
   return { plan };
 }
 
-function battingIntent(s: MatchState, side: Side, batterId: string): number {
+/** Test cricket: occupation of the crease first, runs second; the fourth innings follows the target and the clock. */
+function testIntent(s: MatchState, side: Side, batterId: string): number {
   const inn = currentInnings(s)!;
-  const rules = s.setup.rules;
-  const phase = phaseOf(inn, rules.powerplayOvers, rules.overs);
+  const p = playerById(s, batterId);
+  const q = s.setup[side].tacticalQuality;
+  const left = s.setup.rules.overs * 6 - matchBallsUsed(s);
+  const wk = inn.maxWickets - inn.wickets;
+  let intent = 0.15;
+  if (inn.target !== null) {
+    const need = inn.target - inn.runs;
+    const rpo = (need / Math.max(6, left)) * 6;
+    // Chase when it is on; otherwise bat for the draw.
+    intent = rpo > 4.6 || (wk <= 3 && rpo > 3) ? 0.08 : 0.12 + Math.min(0.4, rpo * 0.07);
+  } else {
+    const t = sideTotals(s);
+    const lead = t[side] - t[side === 'home' ? 'away' : 'home'];
+    if (inn.index === 2 && lead > 150) intent += 0.1 + Math.min(0.2, (lead - 150) / 600);
+    if (left < 600 && inn.index < 2) intent += 0.06;
+  }
+  const faced = inn.batters[batterId]?.balls ?? 0;
+  if (faced < 20) intent -= 0.05;
+  if (faced > 80) intent += 0.04;
+  if (p.tags.includes('power')) intent += 0.05;
+  if (p.tags.includes('anchor')) intent -= 0.03;
+  intent += (hash01(`${s.seed}|ti|${s.seq}`) - 0.5) * 0.06 * (1 - q);
+  return Math.max(0.03, Math.min(0.75, intent));
+}
+
+function battingIntent(s: MatchState, side: Side, batterId: string): number {
+  if (formatOf(s) === 'Test') return testIntent(s, side, batterId);
+  const inn = currentInnings(s)!;
+  const odi = formatOf(s) === 'ODI';
+  const phase = phaseFor(s, inn);
   const t = s.setup[side];
   const q = t.tacticalQuality;
   const p = playerById(s, batterId);
-  const base = t.tactics.phaseIntent[phase];
+  const base = t.tactics.phaseIntent[phase] * (odi ? 0.72 : 1);
   let situational: number;
   const wicketsInHand = inn.maxWickets - inn.wickets;
   const ballsLeft = inn.maxBalls - inn.legalBalls;
   if (inn.target !== null) {
     const need = inn.target - inn.runs;
     const rrr = (need / Math.max(1, ballsLeft)) * 6;
-    situational = 0.15 + 0.75 / (1 + Math.exp(-(rrr - 9.5) / 2.4));
-    if (wicketsInHand <= 3 && rrr < 10) situational -= 0.12;
+    const pivot = odi ? 6.6 : 9.5;
+    situational = 0.15 + 0.75 / (1 + Math.exp(-(rrr - pivot) / (odi ? 1.8 : 2.4)));
+    if (wicketsInHand <= 3 && rrr < pivot + 0.5) situational -= 0.12;
+  } else if (odi) {
+    situational = phase === 'powerplay' ? 0.34 : phase === 'middle' ? 0.27 : 0.6;
+    if (wicketsInHand <= 4 && ballsLeft > 60) situational -= 0.14;
+    if (wicketsInHand >= 6 && ballsLeft <= 60) situational += 0.08;
   } else {
     situational = phase === 'powerplay' ? 0.45 : phase === 'middle' ? 0.38 : 0.68;
     if (wicketsInHand <= 4 && ballsLeft > 30) situational -= 0.18;
@@ -180,7 +213,7 @@ function battingOrder(s: MatchState, side: Side): string[] | null {
   if (remaining.length < 2) return null;
   const over = Math.floor(inn.legalBalls / 6);
   const players = remaining.map((id) => playerById(s, id));
-  if (over >= s.setup.rules.overs - 6) {
+  if (formatOf(s) !== 'Test' && over >= s.setup.rules.overs - 6) {
     // death: send the hitters first
     const hit = (p: MatchPlayer) => p.attrs.bat.power * 0.6 + p.attrs.bat.death * 0.4 + (p.tags.includes('finisher') ? 8 : 0);
     const sorted = [...players].sort((a, b) => hit(b) - hit(a) || remaining.indexOf(a.id) - remaining.indexOf(b.id));
@@ -197,6 +230,8 @@ function battingOrder(s: MatchState, side: Side): string[] | null {
 
 function tossDecision(s: MatchState, side: Side): 'bat' | 'bowl' {
   const v = s.setup.venue;
+  // Test cricket: bat first unless the pitch is green; the surface wears for the side batting last.
+  if (formatOf(s) === 'Test') return v.pitch.pace > 0.4 && hash01(`${s.seed}|toss|${side}`) < 0.6 ? 'bowl' : 'bat';
   let chase = 0.58;
   if (s.setup.evening) chase += v.dewChance * 0.3;
   chase -= v.pitch.wear * 0.4;
@@ -213,4 +248,23 @@ function review(s: MatchState, side: Side, _ev: DeliveryEvent, perceived: number
   return perceived >= threshold;
 }
 
-export const AiCaptain: Captain = { tossDecision, chooseBowler, overStart, battingIntent, battingOrder, review };
+/** Test cricket: declare with a big first-innings total, or once the lead leaves enough time to bowl the opposition out. */
+function declare(s: MatchState, side: Side): boolean {
+  const inn = currentInnings(s)!;
+  const t = sideTotals(s);
+  const lead = t[side] - t[side === 'home' ? 'away' : 'home'];
+  const left = s.setup.rules.overs * 6 - matchBallsUsed(s);
+  const q = s.setup[side].tacticalQuality;
+  if (inn.index <= 1) return inn.runs >= 600 || (inn.runs >= 480 && left < 1500 && lead > 100);
+  // Third innings: enough lead, and enough overs left (about 55 balls per wicket) to take ten wickets.
+  const need = lead;
+  const ballsToWin = 10 * 55;
+  return (need >= 260 + (1 - q) * 60 && left <= need * 3.2 + 300 && left >= ballsToWin * 0.75) || need >= 520;
+}
+
+function followOn(s: MatchState, _side: Side, lead: number): boolean {
+  const left = s.setup.rules.overs * 6 - matchBallsUsed(s);
+  return lead >= 250 || left < 1300;
+}
+
+export const AiCaptain: Captain = { tossDecision, chooseBowler, overStart, battingIntent, battingOrder, review, declare, followOn };

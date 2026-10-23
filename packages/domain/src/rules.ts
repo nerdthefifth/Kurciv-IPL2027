@@ -4,7 +4,7 @@ import { canBowl } from './ratings';
 export interface RuleCheck {
   ok: boolean;
   reason?: string;
-  code?: 'SQUAD_FULL' | 'OVERSEAS_LIMIT' | 'COUNTRY_LIMIT' | 'PURSE' | 'ALREADY_CONTRACTED' | 'INJURED' | 'RETIRED' | 'RESERVE';
+  code?: 'SQUAD_FULL' | 'OVERSEAS_LIMIT' | 'COUNTRY_LIMIT' | 'PURSE' | 'ALREADY_CONTRACTED' | 'INJURED' | 'RETIRED' | 'RESERVE' | 'EXPORT';
 }
 
 export interface SquadComposition {

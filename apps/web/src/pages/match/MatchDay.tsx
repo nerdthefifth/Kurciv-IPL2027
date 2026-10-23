@@ -48,12 +48,12 @@ type Act = (a: any, s?: string) => Promise<boolean>;
 type Side = 'home' | 'away';
 
 const C = {
-  page: 'bg-[#111111]',
-  panel: 'bg-[#201f2e]',
-  sheet: 'bg-[#151515]',
-  line: 'border-[#3a3a44]',
-  accent: 'bg-[#5b5bf6]',
-  accentDeep: 'bg-[#3d3ddf]',
+  page: 'bg-[#140d10]',
+  panel: 'bg-[#2a1a20]',
+  sheet: 'bg-[#1a1114]',
+  line: 'border-[#4a333a]',
+  accent: 'bg-[#a3324f]',
+  accentDeep: 'bg-[#7a1f35]',
 };
 
 const other = (s: Side): Side => (s === 'home' ? 'away' : 'home');
@@ -155,10 +155,10 @@ export function MatchDay({ slot, initial }: { slot: 'match' | 'lab'; initial: an
           <div className={`flex justify-center gap-1 border-b ${C.line} ${C.page}`} role="tablist">
             {(['live', 'scorecard', 'commentary'] as const).map((v) => (
               <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}
-                className={`px-5 py-2 text-sm font-semibold uppercase tracking-wider ${view === v ? 'border-b-2 border-[#5b5bf6] text-white' : 'text-[#9a9aa5] hover:text-white'}`}>{v}</button>
+                className={`px-5 py-2 text-sm font-semibold uppercase tracking-wider ${view === v ? 'border-b-2 border-[#a3324f] text-white' : 'text-[#b39e98] hover:text-white'}`}>{v}</button>
             ))}
             {view === 'live' && (
-              <button className="ml-4 self-center rounded bg-[#2a2a35] px-2 py-0.5 text-xs text-[#cfcfd6] hover:bg-[#34343f]" onClick={() => { setUnsupported(null); save3D({ ...v3d, enabled: !v3d.enabled }); }}>
+              <button className="ml-4 self-center rounded bg-[#33222a] px-2 py-0.5 text-xs text-[#e3d3cd] hover:bg-[#3f2a33]" onClick={() => { setUnsupported(null); save3D({ ...v3d, enabled: !v3d.enabled }); }}>
                 {v3d.enabled && !unsupported ? 'Switch to 2D' : '3D view'}
               </button>
             )}
@@ -193,8 +193,8 @@ function TossScreen({ state, needs, act, step, user }: { state: any; needs: any;
       <div className="flex items-center" aria-label={`Toss step ${stage} of 4`}>
         {[1, 2, 3, 4].map((i) => (
           <span key={i} className="flex items-center">
-            {i > 1 && <span className={`h-1 w-12 ${i <= stage ? 'bg-[#22c55e]' : 'bg-[#3a3a44]'}`} />}
-            <span className={`h-6 w-6 rounded-full ${i <= stage ? 'bg-[#22c55e]' : 'bg-[#3a3a44]'}`} />
+            {i > 1 && <span className={`h-1 w-12 ${i <= stage ? 'bg-[#22c55e]' : 'bg-[#4a333a]'}`} />}
+            <span className={`h-6 w-6 rounded-full ${i <= stage ? 'bg-[#22c55e]' : 'bg-[#4a333a]'}`} />
           </span>
         ))}
       </div>
@@ -203,7 +203,7 @@ function TossScreen({ state, needs, act, step, user }: { state: any; needs: any;
         <span className="text-lg">Vs</span>
         <Circle size={100}><Crest state={state} side="away" size={64} /></Circle>
       </div>
-      <p className="-mt-4 text-sm text-[#9a9aa5]">{v.name} · {v.pitch.kind} pitch{v.pitch.spin > 0.3 ? ', helps spin' : v.pitch.pace > 0.3 ? ', helps seam' : ''} · dew {Math.round(v.dewChance * 100)}%</p>
+      <p className="-mt-4 text-sm text-[#b39e98]">{v.name} · {v.pitch.kind} pitch{v.pitch.spin > 0.3 ? ', helps spin' : v.pitch.pace > 0.3 ? ', helps seam' : ''} · dew {Math.round(v.dewChance * 100)}%</p>
 
       {!tossed && (
         needs?.kind === 'toss-call' ? (
@@ -217,20 +217,20 @@ function TossScreen({ state, needs, act, step, user }: { state: any; needs: any;
               ))}
             </div>
           </>
-        ) : <p className="text-[#9a9aa5]">Tossing…</p>
+        ) : <p className="text-[#b39e98]">Tossing…</p>
       )}
 
       {tossed && (
         <>
           <Circle size={150}><Crest state={state} side={t.winner} size={96} /></Circle>
           <p className="-mt-2 text-2xl">Won the toss</p>
-          <p className="-mt-6 text-sm text-[#9a9aa5]">{user && t.call ? `You called ${t.call}; it landed ${t.coin}.` : `It landed ${t.coin}.`}</p>
+          <p className="-mt-6 text-sm text-[#b39e98]">{user && t.call ? `You called ${t.call}; it landed ${t.coin}.` : `It landed ${t.coin}.`}</p>
           {userWon && needs?.kind === 'toss' ? (
             <>
               <div className="flex gap-10">
                 {(['bat', 'bowl'] as const).map((c) => (
                   <button key={c} onClick={() => setChoice(c)} aria-pressed={choice === c} aria-label={c === 'bat' ? 'Bat first' : 'Bowl first'}
-                    className={`rounded-full p-2 ring-[6px] transition ${choice === c ? 'ring-white' : 'ring-transparent hover:ring-[#3a3a44]'}`}>
+                    className={`rounded-full p-2 ring-[6px] transition ${choice === c ? 'ring-white' : 'ring-transparent hover:ring-[#4a333a]'}`}>
                     <Circle size={140}><span className="flex flex-col items-center gap-1 text-[#e5e5e5]"><Icon name={c === 'bat' ? 'bat' : 'ball'} size={56} /><span className="text-sm uppercase tracking-widest">{c}</span></span></Circle>
                   </button>
                 ))}
@@ -257,15 +257,15 @@ function TopBar({ state, inn }: { state: any; inn: any }) {
     <header aria-label="Scoreboard" className={`${C.panel} grid grid-cols-1 items-center gap-3 px-6 py-4 md:grid-cols-[1fr_auto_1fr]`}>
       <div className="flex items-center gap-3">
         <Crest state={state} side="home" size={34} />
-        <span className="text-2xl text-[#cfcfd6]">Vs</span>
+        <span className="text-2xl text-[#e3d3cd]">Vs</span>
         <Crest state={state} side="away" size={34} />
       </div>
       {inn ? (
         <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-1" aria-live="polite">
           <Crest state={state} side={inn.battingSide} size={30} />
           <span className="num text-2xl font-semibold">{inn.runs} - {inn.wickets}</span>
-          <span className="num text-2xl text-[#9a9aa5]">({overs(inn.legalBalls)}) <b className="text-[#cfcfd6]">{inn.maxBalls / 6}</b></span>
-          <span className="text-lg text-[#9a9aa5]">CRR <span className="num ml-2 text-[#cfcfd6]">{inn.legalBalls ? ((inn.runs / inn.legalBalls) * 6).toFixed(2) : '0.00'}</span></span>
+          <span className="num text-2xl text-[#b39e98]">({overs(inn.legalBalls)}) <b className="text-[#e3d3cd]">{inn.maxBalls / 6}</b></span>
+          <span className="text-lg text-[#b39e98]">CRR <span className="num ml-2 text-[#e3d3cd]">{inn.legalBalls ? ((inn.runs / inn.legalBalls) * 6).toFixed(2) : '0.00'}</span></span>
           {need !== null && !done && <span className="text-sm text-[#facc15]">Need {Math.max(0, need)} off {left}</span>}
         </div>
       ) : <span />}
@@ -275,7 +275,7 @@ function TopBar({ state, inn }: { state: any; inn: any }) {
         ) : (
           <>
             <Crest state={state} side={t.winner} size={30} />
-            <span className="text-[#cfcfd6]">decided to</span>
+            <span className="text-[#e3d3cd]">decided to</span>
             <span className="font-semibold uppercase text-[#22c55e]">{t.decision}</span>
           </>
         )}
@@ -321,7 +321,7 @@ function LiveBoard({ m, inn, user, onFinish, slot }: { m: ReturnType<typeof useM
               if (!p || !b) return null;
               const on = id === inn.strikerId;
               return (
-                <tr key={id} className={on ? 'bg-[#111111] font-semibold' : 'text-[#cfcfd6]'}>
+                <tr key={id} className={on ? 'bg-[#140d10] font-semibold' : 'text-[#e3d3cd]'}>
                   <td className="rounded-l-lg py-2 pl-3 text-left"><span className="flex items-center gap-2"><Portrait p={p} />{p.shortName}{on ? ' *' : ''}<Marks state={state} id={id} /></span></td>
                   <td className="num">{b.runs} ( {b.balls} )</td>
                   <td className="num text-[#22c55e]">{sr(b.runs, b.balls)}</td>
@@ -348,7 +348,7 @@ function LiveBoard({ m, inn, user, onFinish, slot }: { m: ReturnType<typeof useM
               const p = findPlayer(state, bowlerId);
               const b = inn.bowlers[bowlerId];
               return (
-                <tr className="bg-[#111111] font-semibold">
+                <tr className="bg-[#140d10] font-semibold">
                   <td className="rounded-l-lg py-2 pl-3 text-left"><span className="flex items-center gap-2"><Portrait p={p} />{p.shortName}<Marks state={state} id={bowlerId} /></span></td>
                   <td className="num text-[#22c55e]">{overs(b.balls)}</td>
                   <td className="num">{b.runs}</td>
@@ -356,7 +356,7 @@ function LiveBoard({ m, inn, user, onFinish, slot }: { m: ReturnType<typeof useM
                   <td className="num rounded-r-lg text-[#f97316]">{eco(b.runs, b.balls)}</td>
                 </tr>
               );
-            })() : <tr><td colSpan={5} className="py-3 text-sm text-[#9a9aa5]">Bowler to be chosen</td></tr>}
+            })() : <tr><td colSpan={5} className="py-3 text-sm text-[#b39e98]">Bowler to be chosen</td></tr>}
           </tbody>
         </table>
       </section>
@@ -376,13 +376,13 @@ function LiveBoard({ m, inn, user, onFinish, slot }: { m: ReturnType<typeof useM
         ) : (
           <>
             <div className="flex w-full max-w-[900px] flex-col items-center gap-6 md:flex-row md:justify-between">
-              <div className="min-h-[3rem] max-w-sm flex-1 text-sm text-[#cfcfd6]" aria-live="polite">
+              <div className="min-h-[3rem] max-w-sm flex-1 text-sm text-[#e3d3cd]" aria-live="polite">
                 {last ? (
                   <div className="flex items-start gap-2">
                     <span className={`num flex h-7 min-w-[2rem] shrink-0 items-center justify-center rounded px-1 font-bold ${ballChip(last).tone}`}>{ballChip(last).text}</span>
                     <span>{last.over}.{last.legal ? last.ball : last.ball + 1} · {last.commentary}</span>
                   </div>
-                ) : <span className="text-[#9a9aa5]">First ball coming up.</span>}
+                ) : <span className="text-[#b39e98]">First ball coming up.</span>}
               </div>
               <HitButton m={m} blocked={blocked} onHit={() => step('ball')} />
               <div className="flex max-w-sm flex-1 flex-wrap justify-center gap-2 md:justify-end">
@@ -390,7 +390,7 @@ function LiveBoard({ m, inn, user, onFinish, slot }: { m: ReturnType<typeof useM
               </div>
             </div>
             {batting && <ApproachRow m={m} inn={inn} />}
-            {needs && needs.side !== user && <p className="text-sm text-[#9a9aa5]">Waiting for the opposition…</p>}
+            {needs && needs.side !== user && <p className="text-sm text-[#b39e98]">Waiting for the opposition…</p>}
           </>
         )}
       </section>
@@ -413,7 +413,7 @@ function Live3D({ m, inn, user, onFinish, slot, presenter, settings, onSettings,
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="relative min-h-0 flex-1">
-        <Suspense fallback={<div className="grid h-full place-items-center text-sm text-[#9a9aa5]">Loading the 3D ground…</div>}>
+        <Suspense fallback={<div className="grid h-full place-items-center text-sm text-[#b39e98]">Loading the 3D ground…</div>}>
           <Match3D state={state} last={deliveries[deliveries.length - 1] ?? null} speed={m.speed} presenter={presenter} settings={settings} onSettings={onSettings} onUnsupported={onUnsupported} busy={m.busy} />
         </Suspense>
         {inn && <ScoreBug state={state} inn={inn} innBalls={innBalls} />}
@@ -431,13 +431,13 @@ function Live3D({ m, inn, user, onFinish, slot, presenter, settings, onSettings,
           </>
         ) : (
           <>
-            <div className="min-w-0 max-w-md flex-1 truncate text-sm text-[#cfcfd6]" aria-live="polite" title={last?.commentary}>
-              {last ? <><span className={`num mr-2 inline-flex h-6 min-w-[1.75rem] items-center justify-center rounded px-1 font-bold ${ballChip(last).tone}`}>{ballChip(last).text}</span>{last.over}.{last.legal ? last.ball : last.ball + 1} · {last.commentary}</> : <span className="text-[#9a9aa5]">First ball coming up.</span>}
+            <div className="min-w-0 max-w-md flex-1 truncate text-sm text-[#e3d3cd]" aria-live="polite" title={last?.commentary}>
+              {last ? <><span className={`num mr-2 inline-flex h-6 min-w-[1.75rem] items-center justify-center rounded px-1 font-bold ${ballChip(last).tone}`}>{ballChip(last).text}</span>{last.over}.{last.legal ? last.ball : last.ball + 1} · {last.commentary}</> : <span className="text-[#b39e98]">First ball coming up.</span>}
             </div>
             <HitButton m={m} blocked={blocked} onHit={() => step('ball')} small />
             <div className="flex flex-wrap items-center gap-1.5"><PlayButtons m={m} blocked={blocked} /></div>
             {inn && inn.battingSide === user && <ApproachRow m={m} inn={inn} />}
-            {needs && needs.side !== user && <span className="text-sm text-[#9a9aa5]">Waiting for the opposition…</span>}
+            {needs && needs.side !== user && <span className="text-sm text-[#b39e98]">Waiting for the opposition…</span>}
           </>
         )}
       </section>
@@ -555,14 +555,14 @@ function HitButton({ m, blocked, onHit, small = false }: { m: ReturnType<typeof 
 }
 
 function PlayButtons({ m, blocked }: { m: ReturnType<typeof useMatch>; blocked: boolean }) {
-  const btn = 'rounded-md bg-[#2a2a35] px-3 py-1.5 text-sm hover:bg-[#34343f] disabled:opacity-40';
+  const btn = 'rounded-md bg-[#33222a] px-3 py-1.5 text-sm hover:bg-[#3f2a33] disabled:opacity-40';
   return (
     <>
       <button className={btn} disabled={blocked && !m.playing} onClick={() => (m.playing ? m.pause() : m.play())}>{m.playing ? 'Pause' : 'Auto play'}</button>
       <button className={btn} disabled={blocked || m.busy} onClick={() => m.step('over')}>Finish over</button>
       <button className={btn} disabled={blocked || m.busy} onClick={() => m.step('innings')} title="Instant: skips the animation">Sim innings</button>
       <button className={btn} disabled={blocked || m.busy} onClick={() => m.step('end')} title="Instant: skips the animation">Sim match</button>
-      <select className="rounded-md bg-[#2a2a35] px-2 py-1.5 text-sm" aria-label="Playback speed" value={m.speed} onChange={(e) => m.setSpeed(e.target.value as Speed)}>
+      <select className="rounded-md bg-[#33222a] px-2 py-1.5 text-sm" aria-label="Playback speed" value={m.speed} onChange={(e) => m.setSpeed(e.target.value as Speed)}>
         {SPEEDS.map((s) => <option key={s} value={s}>{s}</option>)}
       </select>
     </>
@@ -583,10 +583,10 @@ function ApproachRow({ m, inn }: { m: ReturnType<typeof useMatch>; inn: any }) {
   };
   return (
     <div className="flex flex-wrap items-center justify-center gap-1.5" role="radiogroup" aria-label="Batting approach">
-      <span className="mr-1 text-xs uppercase tracking-widest text-[#9a9aa5]">Approach</span>
+      <span className="mr-1 text-xs uppercase tracking-widest text-[#b39e98]">Approach</span>
       {APPROACHES.map((a) => (
         <button key={a.id} role="radio" aria-checked={approach === a.id} onClick={() => setApproach(a)}
-          className={`rounded-full px-3 py-1 text-sm ${approach === a.id ? `${C.accent} text-white` : 'bg-[#2a2a35] text-[#cfcfd6] hover:bg-[#34343f]'}`}>{a.label}</button>
+          className={`rounded-full px-3 py-1 text-sm ${approach === a.id ? `${C.accent} text-white` : 'bg-[#33222a] text-[#e3d3cd] hover:bg-[#3f2a33]'}`}>{a.label}</button>
       ))}
     </div>
   );
@@ -621,7 +621,7 @@ function OverStrip({ state, inn, balls }: { state: any; inn: any; balls: any[] }
             <button key={o.over} onClick={() => setSel(o.over)} aria-pressed={shown?.over === o.over}
               className={`min-w-[7rem] px-4 py-3 text-center text-sm ${shown?.over === o.over ? 'bg-[#2b3036]' : 'hover:bg-[#262535]'}`}>
               <div className="font-semibold">Ov {o.over + 1}</div>
-              <div className="mt-2 text-[#cfcfd6]">{o.runs} runs{o.wickets ? ` · ${o.wickets}W` : ''}</div>
+              <div className="mt-2 text-[#e3d3cd]">{o.runs} runs{o.wickets ? ` · ${o.wickets}W` : ''}</div>
             </button>
           ))}
         </div>
@@ -636,15 +636,15 @@ function Commentary({ deliveries }: { deliveries: any[] }) {
   if (!recent.length) return null;
   return (
     <section className="mx-auto max-w-[900px] px-4 py-4" aria-label="Commentary">
-      <h3 className="mb-2 text-sm uppercase tracking-widest text-[#9a9aa5]">Commentary</h3>
+      <h3 className="mb-2 text-sm uppercase tracking-widest text-[#b39e98]">Commentary</h3>
       <ol className={`divide-y divide-[#26262e] rounded-lg ${C.panel} text-sm`}>
         {recent.map((d) => {
           const c = ballChip(d);
           return (
             <li key={d.seq} className="flex gap-3 px-3 py-2">
-              <span className="num w-10 shrink-0 text-[#9a9aa5]">{d.over}.{d.legal ? d.ball : d.ball + 1}</span>
+              <span className="num w-10 shrink-0 text-[#b39e98]">{d.over}.{d.legal ? d.ball : d.ball + 1}</span>
               <span className={`num flex h-6 min-w-[1.75rem] shrink-0 items-center justify-center rounded px-1 text-xs font-bold ${c.tone}`}>{c.text}</span>
-              <span className="text-[#cfcfd6]">
+              <span className="text-[#e3d3cd]">
                 {d.commentary}
                 {d.review && <span className="block text-[#9ec1ff]">DRS: {d.review.overturned ? 'overturned' : d.review.umpiresCall ? "umpire's call" : 'decision stands'}</span>}
               </span>
@@ -679,7 +679,7 @@ function PickSheet({ state, side, title, rows, cols, onNext, nextLabel = 'Next',
               <button disabled={!!r.note} onClick={() => setSel(r.id)} onDoubleClick={() => !r.note && onNext(r.id)} aria-pressed={sel === r.id} title={r.note ?? undefined}
                 className={`flex w-full items-center gap-3 border-b ${C.line} px-4 py-2.5 text-left text-lg transition ${sel === r.id ? 'bg-[#2c2c2c]' : 'hover:bg-[#1d1d1d]'} disabled:cursor-not-allowed disabled:opacity-40`}>
                 <Portrait p={r.p} size={36} />
-                <span className="flex-1 truncate">{r.p.shortName}{r.note ? <span className="ml-2 text-xs text-[#9a9aa5]">{r.note}</span> : null}</span>
+                <span className="flex-1 truncate">{r.p.shortName}{r.note ? <span className="ml-2 text-xs text-[#b39e98]">{r.note}</span> : null}</span>
                 {r.cells.map((c, i) => <span key={i} className={`num w-20 text-right ${i === r.cells.length - 1 ? 'text-[#22c55e]' : ''}`}>{c}</span>)}
               </button>
             </li>
@@ -736,13 +736,13 @@ function ReviewSheet({ state, inn, needs, act }: { state: any; inn: any; needs: 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-3" role="dialog" aria-modal aria-label="Review the decision">
       <div className={`${C.sheet} w-full max-w-[460px] rounded-xl p-6 text-center text-white`}>
-        <div className="text-sm uppercase tracking-widest text-[#9a9aa5]">Umpire’s decision · {needs.decision === 'caught-behind' ? 'Caught behind' : 'LBW'}</div>
+        <div className="text-sm uppercase tracking-widest text-[#b39e98]">Umpire’s decision · {needs.decision === 'caught-behind' ? 'Caught behind' : 'LBW'}</div>
         {batter && <div className="mt-3 flex items-center justify-center gap-2"><Portrait p={batter} size={40} /><span className="text-lg">{batter.name}</span></div>}
         <div className={`mt-2 font-display text-5xl font-bold uppercase ${out ? 'text-[#ef4444]' : 'text-white'}`}>{out ? 'Out' : 'Not out'}</div>
-        <p className="mt-3 text-sm text-[#cfcfd6]">{needs.by === 'batting' ? 'Review the dismissal?' : 'Review the not-out call?'} {left} review{left === 1 ? '' : 's'} left.</p>
+        <p className="mt-3 text-sm text-[#e3d3cd]">{needs.by === 'batting' ? 'Review the dismissal?' : 'Review the not-out call?'} {left} review{left === 1 ? '' : 's'} left.</p>
         <div className="mt-5 flex gap-3">
           <button className={`${C.accentDeep} flex-1 rounded-md py-2.5 uppercase hover:brightness-110`} onClick={() => act({ type: 'review', review: true })}>Review</button>
-          <button className="flex-1 rounded-md bg-[#2a2a35] py-2.5 uppercase hover:bg-[#34343f]" onClick={() => act({ type: 'review', review: false })}>Accept</button>
+          <button className="flex-1 rounded-md bg-[#33222a] py-2.5 uppercase hover:bg-[#3f2a33]" onClick={() => act({ type: 'review', review: false })}>Accept</button>
         </div>
       </div>
     </div>
@@ -755,10 +755,10 @@ function ReviewResult({ ev, state, onClose }: { ev: any; state: any; onClose: ()
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-3" role="dialog" aria-modal aria-label="Review result" onClick={onClose}>
       <div className={`${C.sheet} w-full max-w-[420px] rounded-xl p-6 text-center text-white`}>
-        <div className="text-sm uppercase tracking-widest text-[#9a9aa5]">DRS · {r.kind === 'caught-behind' ? 'Caught behind' : 'LBW'} · {batter?.shortName}</div>
+        <div className="text-sm uppercase tracking-widest text-[#b39e98]">DRS · {r.kind === 'caught-behind' ? 'Caught behind' : 'LBW'} · {batter?.shortName}</div>
         <div className={`mt-3 font-display text-4xl font-bold uppercase ${ev.wicket ? 'text-[#ef4444]' : 'text-[#22c55e]'}`}>{ev.wicket ? 'Out' : 'Not out'}</div>
-        <p className="mt-2 text-[#cfcfd6]">{r.overturned ? 'Decision overturned.' : r.umpiresCall ? "Umpire's call — the decision stands." : 'The decision stands.'}</p>
-        {r.decisive && <p className="mt-1 text-sm text-[#9a9aa5]">{r.decisive}</p>}
+        <p className="mt-2 text-[#e3d3cd]">{r.overturned ? 'Decision overturned.' : r.umpiresCall ? "Umpire's call — the decision stands." : 'The decision stands.'}</p>
+        {r.decisive && <p className="mt-1 text-sm text-[#b39e98]">{r.decisive}</p>}
         <button className={`${C.accentDeep} mt-5 w-full rounded-md py-2.5 uppercase`} onClick={onClose}>Continue</button>
       </div>
     </div>
@@ -768,7 +768,7 @@ function ReviewResult({ ev, state, onClose }: { ev: any; state: any; onClose: ()
 // ------------------------------------------------------------------ scorecard
 
 function ScorecardView({ state }: { state: any }) {
-  if (!state.innings.length) return <p className="p-6 text-center text-[#9a9aa5]">No innings yet.</p>;
+  if (!state.innings.length) return <p className="p-6 text-center text-[#b39e98]">No innings yet.</p>;
   return (
     <div className="mx-auto max-w-[620px] space-y-10 px-4 py-6">
       {state.innings.map((inn: any) => <InningsCard key={inn.index} state={state} inn={inn} />)}
@@ -815,7 +815,7 @@ function InningsCard({ state, inn }: { state: any; inn: any }) {
                     <Portrait p={p} size={30} />
                     <span>
                       <span className="block font-semibold">{p.shortName}<Marks state={state} id={id} /></span>
-                      <span className={`block text-xs ${b.out ? 'text-[#9a9aa5]' : 'text-[#22c55e]'}`}>{b.out ? b.out.text : 'not out'}</span>
+                      <span className={`block text-xs ${b.out ? 'text-[#b39e98]' : 'text-[#22c55e]'}`}>{b.out ? b.out.text : 'not out'}</span>
                     </span>
                   </span>
                 </td>
@@ -826,7 +826,7 @@ function InningsCard({ state, inn }: { state: any; inn: any }) {
               </tr>
             );
           })}
-          <tr className={`border-b ${C.line} text-sm text-[#9a9aa5]`}>
+          <tr className={`border-b ${C.line} text-sm text-[#b39e98]`}>
             <td className="py-2 pl-3 text-left">Extras</td>
             <td className="num">{ex.wides + ex.noBalls + ex.byes + ex.legByes}</td>
             <td colSpan={3} className="text-left">w {ex.wides}, nb {ex.noBalls}, b {ex.byes}, lb {ex.legByes}</td>

@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import type { Fixture, WorldState } from '@kurciv/domain';
-import { canBowl, validateXI } from '@kurciv/domain';
-import { CLUB_SEEDS, COUNTRY_NAMES, FEATURE_FLAGS, IMAGE_LOOKUP, LEAGUES, VENUES, leagueById } from '@kurciv/config';
+import type { Fixture, Player, WorldState } from '@kurciv/domain';
+import { ageOf, canBowl, marketValue, overall, validateXI } from '@kurciv/domain';
+import { ALL_LEAGUE_CONFIGS, CLUB_SEEDS, COUNTRY_NAMES, DIVISIONS, domesticOf, FEATURE_FLAGS, FICTIONAL_CLUB_SEEDS, IMAGE_LOOKUP, leagueById, LEAGUES, PRESEASON, PYRAMID, stadiumCatalogue, VENUES } from '@kurciv/config';
 import { PLAYER_DB_META, playerDatabase } from '@kurciv/data-ingestion';
 import { defaultTactics, pickXI, simulateMatch } from '@kurciv/ai';
 import { BUILT_IN_FIELDS, applyAction, createMatch, type MatchAction, type MatchState } from '@kurciv/simulation';
@@ -9,11 +9,16 @@ import {
   advance, advanceCascade, applyStoryAction, auctionAct, autoFillUserSquad, buildMatchSetup, clubsInLeague, commitRetentions, completeUserFixture,
   createWorld, endSeason, fastForward, facilityUpgradeCost, freeAgentsFor, liveCommand, liveTick, matchSeed, nextUserFixture, planFormat, promoteYouth,
   qualificationPath, releasePlayer, releaseYouth, selectXI, setUserRetentions, signFreeAgent, squadOf, squadProblems, startSeason, upgradeFacility,
-  capHolders, capRaces, setCaptaincy, suggestLeaders,
+  capHolders, capRaces, setCaptaincy, suggestLeaders, enterPreseason, activeLeagues, isPyramid, acceptNationalJob, resignNationalJob, setNationalSquad,
+  arrangeFriendly, cancelFriendly, previewFriendly, seedPreview,
   clubWorldSync, negotiateObjective, replyToConversation, respondToMessage, cw,
   type LiveCommand, type MatchRecord,
 } from '@kurciv/world';
 import { boardView, conversationsView, feedView, inboxView, newsView } from './clubworld-views';
+import {
+  auctionPrep, calendarView, clubDirectory, continentalView, internationalView, intlFixtureDetail, nationView, populationCounts, preseasonView, pyramidView,
+  stadiumDirectory, universeOverview,
+} from './universe-views';
 import { auctionRoomView, auctionSummary, userAuctionOf } from './auction-view';
 import { clubhouse, qualificationOdds } from './clubhouse';
 import { buildMatchReport } from './report/match-report';
@@ -232,7 +237,9 @@ export class Backend {
         playoffs: l.playoffs, rounds: l.rounds, squadRules: l.squadRules, purse: l.auctionRules.purse, minBase: l.auctionRules.minBase, domesticCountries: l.domesticCountries,
         clubs: (CLUB_SEEDS[l.id] ?? []).map((c) => ({ id: c.id, name: c.name, shortName: c.shortName, city: c.city, colors: c.colors, personality: c.personality, brand: c.brand, venueId: c.venueId, venue: VENUES.find((v) => v.id === c.venueId)?.name })),
       })),
-      venues: VENUES.map((v) => ({ id: v.id, name: v.name, city: v.city, country: v.country })),
+      venues: stadiumCatalogue().map((v) => ({ id: v.id, name: v.name, city: v.city, country: v.country, fictional: !!v.fictional })),
+      divisions: DIVISIONS.map((d) => ({ id: d.id, name: d.name, shortName: d.shortName, tier: d.tier, purse: d.auctionRules.purse, squadRules: d.squadRules })),
+      pyramid: { ...PYRAMID, seeding: seedPreview(), fictionalClubs: FICTIONAL_CLUB_SEEDS.map((c) => ({ id: c.id, name: c.name, shortName: c.shortName, city: c.city, country: c.country, colors: c.colors, venueId: c.venueId })) },
       fields: BUILT_IN_FIELDS, flags: FEATURE_FLAGS, imageLookup: IMAGE_LOOKUP, gameVersion: GAME_VERSION, schemaVersion: SAVE_SCHEMA_VERSION,
     }));
 
@@ -245,6 +252,7 @@ export class Backend {
       philosophy: z.enum(['balanced', 'aggressive', 'anchored', 'spin', 'pace']).default('balanced'),
       seed: z.string().max(64).optional(),
       clubId: z.string().max(8).optional(),
+      worldModel: z.enum(['pyramid', 'leagues']).default('pyramid'),
       customClub: z.object({
         name: z.string().max(40), shortName: z.string().max(4), city: z.string().max(40), leagueId: z.string().max(8),
         colors: z.tuple([z.string().regex(/^#[0-9a-fA-F]{6}$/), z.string().regex(/^#[0-9a-fA-F]{6}$/)]), venueId: z.string().max(40).optional(),
@@ -339,9 +347,9 @@ export class Backend {
         players: squad.map((p) => playerView(w, p)),
         academy: club.academy.map((pid) => playerView(w, w.players[pid])),
         lineup: club.lineup,
-        suggestedXI: squad.length >= 11 ? pickXI(squad, l.squadRules, l.domesticCountries).map((p) => p.id) : [],
+        suggestedXI: squad.length >= 11 ? pickXI(squad, l.squadRules, domesticOf(club)).map((p) => p.id) : [],
         problems: squadProblems(w, club),
-        lineupCheck: club.lineup ? validateXI(club.lineup.map((pid) => w.players[pid]), club.squad, l.squadRules, l.domesticCountries) : null,
+        lineupCheck: club.lineup ? validateXI(club.lineup.map((pid) => w.players[pid]), club.squad, l.squadRules, domesticOf(club)) : null,
         captaincy: club.captaincy ?? null,
         suggestedLeaders: suggestLeaders(w, club),
         leadership: Object.fromEntries(squad.map((p) => [p.id, Math.round(p.attrs.mental.leadership)])),
@@ -368,7 +376,7 @@ export class Backend {
     r('GET', '/careers/:cid/players', ({ params, query }) => this.view(params.cid, (w) => {
       const q = parse(z.object({
         search: z.string().max(60).optional(), role: z.enum(['BAT', 'WK', 'AR', 'BOWL']).optional(), country: z.string().max(4).optional(),
-        league: z.string().max(8).optional(), status: z.enum(['all', 'free', 'contracted', 'mine']).optional(),
+        league: z.string().max(8).optional(), status: z.enum(['all', 'free', 'contracted', 'mine']).optional(), kind: z.enum(['real', 'fictional']).optional(),
         sort: z.enum(['ovr', 'age', 'value', 'runs', 'wickets', 'name']).optional(), page: z.coerce.number().int().min(0).max(500).optional(),
       }), Object.fromEntries(query));
       const s = q.search?.toLowerCase();
@@ -380,13 +388,17 @@ export class Backend {
       if (q.status === 'free') list = list.filter((p) => !p.clubId);
       if (q.status === 'contracted') list = list.filter((p) => p.clubId);
       if (q.status === 'mine') list = list.filter((p) => p.clubId === w.userClubId);
+      if (q.kind === 'real') list = list.filter((p) => p.source === 'curated' || p.source === 'registry');
+      if (q.kind === 'fictional') list = list.filter((p) => p.source === 'generated' || p.source === 'youth');
       const key = q.sort ?? 'ovr';
-      const views = list.map((p) => playerView(w, p));
-      views.sort((a, b) =>
-        key === 'name' ? a.name.localeCompare(b.name) : key === 'age' ? a.age - b.age : key === 'value' ? b.marketValue - a.marketValue
-          : key === 'runs' ? b.season.runs - a.season.runs : key === 'wickets' ? b.season.wickets - a.season.wickets : b.ovr - a.ovr);
       const page = q.page ?? 0;
-      return { total: views.length, page, pageSize: 50, players: views.slice(page * 50, page * 50 + 50) };
+      // Large populations: sort on raw values and build views only for the requested page.
+      const seasonTotal = (p: Player, f: 'runs' | 'wickets') => Object.entries(p.stats.seasons).filter(([k]) => k.startsWith(`${w.season}:`) && !k.includes(':INTL-')).reduce((a, [, v]) => a + v[f], 0);
+      const keyOf = (p: Player): number | string =>
+        key === 'name' ? p.name : key === 'age' ? -ageOf(p, w.season) : key === 'value' ? marketValue(p, w.season) : key === 'runs' ? seasonTotal(p, 'runs') : key === 'wickets' ? seasonTotal(p, 'wickets') : overall(p);
+      const keyed = list.map((p) => ({ p, k: keyOf(p) }));
+      keyed.sort((a, b) => (typeof a.k === 'string' ? (a.k as string).localeCompare(b.k as string) : (b.k as number) - (a.k as number)) || a.p.id.localeCompare(b.p.id));
+      return { total: keyed.length, page, pageSize: 50, players: keyed.slice(page * 50, page * 50 + 50).map((x) => playerView(w, x.p)) };
     }));
 
     r('GET', '/careers/:cid/players/:pid', ({ params }) => this.view(params.cid, (w) => {
@@ -402,7 +414,7 @@ export class Backend {
     }));
 
     r('GET', '/careers/:cid/leagues/:leagueId', ({ params }) => this.view(params.cid, (w) => {
-      const l = LEAGUES.find((x) => x.id === params.leagueId);
+      const l = ALL_LEAGUE_CONFIGS().find((x) => x.id === params.leagueId);
       if (!l) throw new AppError(404, 'League not found.');
       const compId = `${l.id}-${w.season}`;
       const comp = w.competitions[compId];
@@ -479,7 +491,8 @@ export class Backend {
       const total = path.reduce((s, p) => s + p.slots, 0);
       return {
         season: w.season, phase: w.phase,
-        leagues: LEAGUES.map((l) => ({ ...w.leagues[l.id], id: l.id, name: l.name, shortName: l.shortName, country: l.country, countryName: COUNTRY_NAMES[l.country], fictional: l.fictional, clubs: clubsInLeague(w, l.id).length, champion: w.competitions[`${l.id}-${w.season}`]?.championId ?? null })),
+        worldModel: w.worldModel ?? 'leagues',
+        leagues: activeLeagues(w).map((l) => ({ ...w.leagues[l.id], id: l.id, name: l.name, shortName: l.shortName, country: l.country, countryName: COUNTRY_NAMES[l.country], fictional: l.fictional, tier: l.tier ?? null, clubs: clubsInLeague(w, l.id).length, champion: w.competitions[`${l.id}-${w.season}`]?.championId ?? null })),
         qualification: path.map((p) => ({ ...p, clubs: p.clubIds.map((x) => ({ id: x, name: w.clubs[x].name })) })),
         plan: total ? planFormat(total) : null,
       };
@@ -495,6 +508,79 @@ export class Backend {
         groups: Object.keys(groups).sort().map((g) => ({ group: g, table: standingsView(w, comp.id, g) })),
         fixtures: Object.values(w.fixtures).filter((f) => f.competitionId === comp.id).sort((a, b) => a.day - b.day || a.id.localeCompare(b.id, undefined, { numeric: true })).map((f) => fixtureView(w, f)),
       };
+    }));
+
+    // -------- the global universe
+    r('GET', '/careers/:cid/universe', ({ params }) => this.view(params.cid, universeOverview));
+    r('GET', '/careers/:cid/population', ({ params }) => this.view(params.cid, populationCounts));
+    r('GET', '/careers/:cid/pyramid', ({ params, query }) => this.view(params.cid, (w) => pyramidView(w, query.get('season') ? Number(query.get('season')) : undefined)));
+    r('GET', '/careers/:cid/club-directory', ({ params, query }) => this.view(params.cid, (w) => clubDirectory(w, {
+      search: query.get('search') ?? undefined, region: query.get('region') ?? undefined, division: query.get('division') ?? undefined, country: query.get('country') ?? undefined, sort: query.get('sort') ?? undefined,
+    })));
+    r('GET', '/careers/:cid/continental', ({ params }) => this.view(params.cid, continentalView));
+    r('GET', '/careers/:cid/stadiums', ({ params, query }) => this.view(params.cid, (w) => stadiumDirectory(w, {
+      search: query.get('search') ?? undefined, region: query.get('region') ?? undefined, country: query.get('country') ?? undefined, kind: query.get('kind') ?? undefined, sort: query.get('sort') ?? undefined,
+    })));
+    r('GET', '/careers/:cid/calendar', ({ params }) => this.view(params.cid, calendarView));
+    r('GET', '/careers/:cid/auction-prep', ({ params }) => this.view(params.cid, auctionPrep));
+
+    r('GET', '/careers/:cid/international', ({ params }) => this.view(params.cid, internationalView));
+    r('GET', '/careers/:cid/international/nations/:nid', ({ params, query }) => this.view(params.cid, (w) => {
+      const f = (query.get('format') ?? 'T20') as 'T20' | 'ODI' | 'Test';
+      if (!['T20', 'ODI', 'Test'].includes(f)) throw new AppError(400, 'Unknown format.');
+      const v = nationView(w, params.nid, f);
+      if (!v) throw new AppError(404, 'Nation not found.');
+      return v;
+    }));
+    r('GET', '/careers/:cid/international/fixtures/:fid', ({ params }) => this.view(params.cid, (w) => {
+      const v = intlFixtureDetail(w, params.fid);
+      if (!v) throw new AppError(404, 'International fixture not found.');
+      return v;
+    }));
+    r('POST', '/careers/:cid/international/accept', async ({ params, body }) => {
+      const { nationId } = parse(z.object({ nationId: id }), body);
+      return this.mutate(params.cid, (w) => {
+        if (!w.universe) throw new AppError(409, 'International management is part of the global universe (new careers).');
+        const err = acceptNationalJob(w, nationId);
+        if (err) throw new AppError(400, err);
+        return { ok: true };
+      });
+    });
+    r('POST', '/careers/:cid/international/resign', ({ params }) => this.mutate(params.cid, (w) => {
+      if (!w.universe) throw new AppError(409, 'No national role in this career.');
+      const err = resignNationalJob(w);
+      if (err) throw new AppError(400, err);
+      return { ok: true };
+    }));
+    r('POST', '/careers/:cid/international/squad', async ({ params, body }) => {
+      const input = parse(z.object({ format: z.enum(['T20', 'ODI', 'Test']), playerIds: z.array(id).min(11).max(20), captainId: id.nullable().default(null) }), body);
+      return this.mutate(params.cid, (w) => {
+        if (!w.universe) throw new AppError(409, 'No national role in this career.');
+        const err = setNationalSquad(w, input.format, input.playerIds, input.captainId);
+        if (err) throw new AppError(400, err);
+        return { ok: true };
+      });
+    });
+
+    const friendlySchema = z.object({
+      opponentId: id, day: z.number().int().min(1).max(400), venue: z.enum(['home', 'away', 'neutral']), neutralVenueId: id.optional(),
+      purpose: z.enum(['fitness', 'selection', 'tactics', 'revenue', 'youth']), mode: z.enum(['play', 'watch', 'sim']),
+    });
+    r('GET', '/careers/:cid/preseason', ({ params, query }) => this.view(params.cid, (w) => preseasonView(w, { search: query.get('search') ?? undefined, region: query.get('region') ?? undefined, division: query.get('division') ?? undefined })));
+    r('POST', '/careers/:cid/preseason/preview', ({ params, body }) => this.view(params.cid, (w) => previewFriendly(w, parse(friendlySchema, body))));
+    r('POST', '/careers/:cid/preseason/friendly', async ({ params, body }) => {
+      const input = parse(friendlySchema, body);
+      return this.mutate(params.cid, (w) => {
+        if (!w.universe) throw new AppError(409, 'Preseason friendlies are part of the global universe (new careers).');
+        const res = arrangeFriendly(w, input);
+        if (res.error) throw new AppError(400, res.error);
+        return { fixtureId: res.fixture!.id };
+      });
+    });
+    r('DELETE', '/careers/:cid/preseason/friendly/:fid', ({ params }) => this.mutate(params.cid, (w) => {
+      const err = cancelFriendly(w, params.fid);
+      if (err) throw new AppError(400, err);
+      return { ok: true };
     }));
 
     r('GET', '/careers/:cid/news', ({ params }) => this.view(params.cid, (w) => ({ news: w.news })));
@@ -681,7 +767,7 @@ export class Backend {
         const changed = liveTick(w, a, dt);
         const resolved = a.live.results.length !== resultsBefore || (a.status as string) !== 'live';
         if ((a.status as string) === 'complete') {
-          if (advanceCascade(w)) w.phase = 'preseason';
+          if (advanceCascade(w)) enterPreseason(w);
         }
         // A sold or unsold lot is a completed transaction: write it immediately.
         if (resolved) {
@@ -723,7 +809,7 @@ export class Backend {
         const resultsBefore = a.live?.results.length ?? 0;
         const res = liveCommand(w, a, cmd);
         if (!res.ok) throw new AppError(400, res.error!);
-        if ((a.status as string) === 'complete' && advanceCascade(w)) w.phase = 'preseason';
+        if ((a.status as string) === 'complete' && advanceCascade(w)) enterPreseason(w);
         const resolved = (a.live?.results.length ?? 0) !== resultsBefore || (a.status as string) !== 'live';
         if (resolved || COMMIT_NOW.has(cmd.type)) {
           const t = this.dirty.get(params.cid);
@@ -743,7 +829,7 @@ export class Backend {
         const a = userAuctionOf(w);
         if (!a || a.status !== 'live' || !a.live) throw new AppError(409, 'There is no live auction for your league.');
         const res = fastForward(w, a, mode);
-        if ((a.status as string) === 'complete' && advanceCascade(w)) w.phase = 'preseason';
+        if ((a.status as string) === 'complete' && advanceCascade(w)) enterPreseason(w);
         return { result: { status: a.status, phase: w.phase, stoppedAt: res.stoppedAt ? w.players[res.stoppedAt].name : null, lots: res.lots } };
       }, { backup: 'Auction complete' });
     });
@@ -755,7 +841,7 @@ export class Backend {
         if (!a || a.status !== 'live') throw new AppError(409, 'There is no live auction for your league.');
         const res = auctionAct(w, a.id, { type: 'sim', until, assistant }, a.version);
         if (!res.ok) throw new AppError(400, res.error!);
-        if ((a.status as string) === 'complete' && advanceCascade(w)) w.phase = 'preseason';
+        if ((a.status as string) === 'complete' && advanceCascade(w)) enterPreseason(w);
         return { result: { status: a.status, phase: w.phase } };
       }, { backup: undefined });
     });
@@ -769,16 +855,27 @@ export class Backend {
         switch (w.phase) {
           case 'auction': {
             if (!advanceCascade(w)) throw new AppError(409, 'Your league’s auction is still in progress — finish it in the Auction House.');
-            w.phase = 'preseason';
+            enterPreseason(w);
             return { result: { phase: w.phase, messages: ['All auctions complete. Finalise your squad and start the season.'] } };
           }
           case 'preseason': {
-            const problems = startSeason(w);
+            // Pyramid: Continue walks through the preseason programme (friendlies and the
+            // international window); the season starts once the user has nothing left to play.
+            if (isPyramid(w) && mode !== 'season' && w.day <= PRESEASON.lastDay) {
+              const pending = Object.values(w.fixtures).some((f) => f.involvesUser && f.status === 'scheduled' && f.mode !== 'sim' && f.season === w.season);
+              if (pending) {
+                const res = advance(w, mode);
+                return { result: { phase: w.phase, stoppedFor: res.stoppedFor, fixtureId: res.fixtureId, messages: res.messages, simulated: res.records.length }, records: res.records };
+              }
+            }
+            const played: MatchRecord[] = [];
+            const problems = startSeason(w, played);
             if (problems.length) throw new AppError(400, problems.join(' '));
-            return { result: { phase: w.phase, messages: ['The season has begun.'] } };
+            return { result: { phase: w.phase, messages: ['The season has begun.'], simulated: played.length }, records: played };
           }
           case 'season':
-          case 'wcc': {
+          case 'wcc':
+          case 'international': {
             const res = advance(w, mode);
             return { result: { phase: w.phase, stoppedFor: res.stoppedFor, fixtureId: res.fixtureId, messages: res.messages, simulated: res.records.length }, records: res.records };
           }
@@ -789,7 +886,7 @@ export class Backend {
           }
           case 'retention': {
             commitRetentions(w);
-            if (advanceCascade(w)) w.phase = 'preseason';
+            if (advanceCascade(w)) enterPreseason(w);
             return { result: { phase: w.phase, messages: ['Retentions committed. The auction cascade has begun.'] } };
           }
         }
@@ -817,7 +914,7 @@ export class Backend {
         const club = w.clubs[w.userClubId];
         if (playerIds) {
           const l = leagueById(club.leagueId);
-          const v = validateXI(playerIds.map((pid) => w.players[pid]).filter(Boolean), club.squad, l.squadRules, l.domesticCountries);
+          const v = validateXI(playerIds.map((pid) => w.players[pid]).filter(Boolean), club.squad, l.squadRules, domesticOf(club));
           if (!v.ok) throw new AppError(400, v.errors.join(' '));
           club.lineup = playerIds;
           return { result: { warnings: v.warnings } };
@@ -917,7 +1014,7 @@ export class Backend {
       if (!xi) return selectXI(w, club, fx).xi;
       const l = leagueById(club.leagueId);
       const players = xi.map((pid) => w.players[pid]).filter(Boolean);
-      const v = validateXI(players, club.squad, l.squadRules, l.domesticCountries);
+      const v = validateXI(players, club.squad, l.squadRules, domesticOf(club));
       if (!v.ok) throw new AppError(400, v.errors.join(' '));
       return players;
     };
@@ -945,6 +1042,11 @@ export class Backend {
         if (!fx?.involvesUser || fx.status !== 'scheduled') throw new AppError(400, 'That is not your next match.');
         if (fx.day !== w.day) throw new AppError(400, 'Advance to match day first.');
         live = { state: createMatch(buildMatchSetup(w, fx, userXIFor(w, fx, xi)), matchSeed(w, fx)), ctlTimeline: [], experimental: false };
+        // A friendly the user chose to watch: the assistant makes every in-match decision.
+        if (fx.mode === 'watch') {
+          const side = fx.homeId === w.userClubId ? 'home' : 'away';
+          applyAction(live.state, side, { type: 'auto', settings: { bowler: true, batter: true, approach: true, plan: true, reviews: true } });
+        }
         fx.status = 'live';
         return { result: { fixtureId: fx.id } };
       });

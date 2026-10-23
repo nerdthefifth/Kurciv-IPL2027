@@ -9,7 +9,10 @@
 | Player **ratings** | Editorial estimates (curated players) or estimates derived from real records (database players) | **Not official data.** Labelled as estimates in player profiles. |
 | In-career **statistics** | Produced only by this game's simulation | Every career starts its statistics at zero. Real-world records are shown separately and never mixed in. |
 | Clubs and competitions | Real franchise and league names, colours and venues | Names belong to their owners. This is an unofficial fan project, not affiliated with or endorsed by any league, club or player. Edit `packages/config/src/leagues.ts` to change them. |
-| Venues | Real ground names with approximate dimensions | Factual geography. |
+| Venues | Real ground names with approximate dimensions and capacities | Factual geography. The 3D stadiums are original procedural modules, not replicas. |
+| Fictional clubs and grounds | 17 invented clubs and grounds in `packages/config/src/universe.ts` | Original. Each fictional ground records its provenance. |
+| Fictional players | 10,000 generated players in every new pyramid career | Generated deterministically from the world seed; labelled fictional everywhere. |
+| National teams | 24 nations with fictional AI managers | Nation names are factual; managers are invented. |
 | Coaches | Fictional | Not presented as real staff. |
 | Cricket Feed accounts and posts | Generated from in-game events | Fictional. Real players never "post"; only fictional generated players have accounts. |
 | Team badges and player cutouts | [TheSportsDB](https://www.thesportsdb.com) public API, fetched at runtime and cached in the browser | Team badges are trademarks, shown for personal, non-commercial play and credited. Nothing is bundled. |
@@ -29,7 +32,7 @@ Before any public or commercial release, review the publicity and image-rights p
 - Ratings are estimates. Disagreement is expected; curated ratings can be edited in `curated.ts`.
 - Real players' 2027 club affiliations are unknown, so every career starts with a full auction. Nobody is pre-assigned to a franchise.
 - Some birth years may be off by a year.
-- International call-ups are not modelled. Players are available to their clubs all season.
+- International cricket is modelled in new careers: call-ups make players unavailable to their clubs for the event. Eligibility uses each player's single sporting nationality.
 - Outside the IPL, database players' estimated ratings leave batters rated below bowlers, which lowers scoring in those leagues (see [BALANCE_REPORT.md](BALANCE_REPORT.md)).
 
 ## Player database (Cricsheet)

@@ -11,7 +11,7 @@ export function InternationalPage() {
   const o = career.overview.data;
   return (
     <div className="space-y-5">
-      <PageHeader title="World Club Championship" subtitle="Up to 50 domestic clubs, qualified through their leagues. Results here move league reputations." />
+      <PageHeader title={world.data?.worldModel === 'pyramid' ? 'Global Club Championship' : 'World Club Championship'} subtitle={world.data?.worldModel === 'pyramid' ? 'Sixteen clubs: continental winners and runners-up plus the best Premier Division finishers. Results move division reputations and club coefficients.' : 'Up to 50 domestic clubs, qualified through their leagues. Results here move league reputations.'} />
       <Async state={state}>
         {(d) =>
           d.competition ? (

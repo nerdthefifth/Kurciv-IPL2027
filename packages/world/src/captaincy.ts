@@ -1,6 +1,6 @@
 import type { Club, Player, WorldState } from '@kurciv/domain';
 import { overall } from '@kurciv/domain';
-import { leagueById } from '@kurciv/config';
+import { domesticOf, leagueById } from '@kurciv/config';
 import { pickXI } from '@kurciv/ai';
 import { cw, sendMessage, staff } from './clubworld/core';
 import { clamp, squadOf } from './util';
@@ -20,7 +20,7 @@ export function suggestLeaders(w: WorldState, club: Club): { captainId: string |
   const squad = squadOf(w, club);
   if (!squad.length) return { captainId: null, viceCaptainId: null };
   const l = leagueById(club.leagueId);
-  const xi = new Set(squad.length >= 11 ? pickXI(squad, l.squadRules, l.domesticCountries).map((p) => p.id) : squad.map((p) => p.id));
+  const xi = new Set(squad.length >= 11 ? pickXI(squad, l.squadRules, domesticOf(club)).map((p) => p.id) : squad.map((p) => p.id));
   const ranked = [...squad].sort((a, b) => leaderScore(b, xi.has(b.id)) - leaderScore(a, xi.has(a.id)) || a.id.localeCompare(b.id));
   return { captainId: ranked[0]?.id ?? null, viceCaptainId: ranked[1]?.id ?? null };
 }

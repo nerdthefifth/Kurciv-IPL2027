@@ -1,6 +1,6 @@
 import type { PitchProfile, Venue, CountryCode } from '@kurciv/domain';
 
-const pitch = (kind: PitchProfile['kind']): PitchProfile => {
+export const pitchProfile = (kind: PitchProfile['kind']): PitchProfile => {
   switch (kind) {
     case 'flat':
       return { kind, pace: -0.2, spin: -0.2, bounce: 0.1, batting: 0.6, wear: 0.1 };
@@ -17,7 +17,7 @@ const pitch = (kind: PitchProfile['kind']): PitchProfile => {
 
 const v = (
   id: string, name: string, city: string, country: CountryCode, straight: number, square: number, kind: PitchProfile['kind'], dew: number, altitude = 10,
-): Venue => ({ id, name, city, country, boundaryStraight: straight, boundarySquare: square, altitude, pitch: pitch(kind), dewChance: dew });
+): Venue => ({ id, name, city, country, boundaryStraight: straight, boundarySquare: square, altitude, pitch: pitchProfile(kind), dewChance: dew });
 
 /** Boundary measurements are approximate playing dimensions (metres from pitch centre). */
 export const VENUES: Venue[] = [
@@ -86,9 +86,3 @@ export const VENUES: Venue[] = [
   v('zahur', 'Zahur Ahmed Chowdhury Stadium', 'Chattogram', 'BAN', 72, 67, 'balanced', 0.35),
   v('sylhet', 'Sylhet International Stadium', 'Sylhet', 'BAN', 71, 66, 'green', 0.3),
 ];
-
-export function venueById(id: string): Venue {
-  const x = VENUES.find((v) => v.id === id);
-  if (!x) throw new Error(`Unknown venue ${id}`);
-  return x;
-}

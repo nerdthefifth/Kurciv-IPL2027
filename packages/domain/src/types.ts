@@ -1,4 +1,5 @@
 // Core domain entities for the Kurciv universe. Everything in a career's world
+import type { UniverseState } from './universe';
 // state is expressed with these types; the simulation, AI and server all share them.
 
 export type Id = string;
@@ -376,6 +377,10 @@ export interface LeagueConfig {
   audience: number; // 0..100
   fictional: boolean;
   format: 'T20';
+  /** 'national' = a real-world style franchise league; 'division' = a tier of the global pyramid. */
+  kind?: 'national' | 'division';
+  /** Pyramid tier (1 = top division). */
+  tier?: number;
   rounds: 1 | 2;
   playoffs: PlayoffFormat;
   squadRules: SquadRules;
@@ -404,6 +409,32 @@ export interface Venue {
   altitude: number; // metres
   pitch: PitchProfile;
   dewChance: number; // 0..1 for evening matches
+  /** Seats (approximate for real grounds). */
+  capacity?: number;
+  /** True for invented grounds. */
+  fictional?: boolean;
+  climate?: Climate;
+  /** Visual identity used by the 3D renderer and the stadium directory. */
+  identity?: StadiumIdentity;
+  /** Where the venue's data and visual modules come from. */
+  provenance?: string;
+}
+
+export type Climate = 'temperate' | 'tropical' | 'arid' | 'highland' | 'subtropical' | 'maritime';
+
+export interface StadiumIdentity {
+  tiers: 1 | 2 | 3;
+  roof: 'none' | 'partial' | 'canopy';
+  floodlights: 'pylon' | 'ring' | 'roofline';
+  /** Main stand and seat colours. */
+  standColor: string;
+  seatColors: [string, string];
+  /** Backdrop beyond the stands. */
+  skyline: 'none' | 'city' | 'hills' | 'coast' | 'desert' | 'mountains';
+  /** Outfield grass tone. */
+  turf: string;
+  /** Overall shape. */
+  shape: 'round' | 'oval' | 'square';
 }
 
 export interface PitchProfile {
@@ -430,7 +461,7 @@ export interface StandingRow {
   form: ('W' | 'L' | 'T')[];
 }
 
-export type CompetitionKind = 'league' | 'wcc';
+export type CompetitionKind = 'league' | 'wcc' | 'continental' | 'friendly';
 
 export interface Competition {
   id: Id; // e.g. "IPL-2027" or "WCC-2027"
@@ -486,7 +517,15 @@ export interface Fixture {
   status: 'scheduled' | 'live' | 'complete';
   result: MatchResultSummary | null;
   involvesUser: boolean;
+  /** Played at a ground that is home to neither side. */
+  neutral?: boolean;
+  /** Friendlies: how the user takes part ('sim' = instant result). */
+  mode?: 'play' | 'watch' | 'sim';
+  /** Friendlies: why the match was arranged. */
+  purpose?: FriendlyPurpose;
 }
+
+export type FriendlyPurpose = 'fitness' | 'selection' | 'tactics' | 'revenue' | 'youth';
 
 // ---------------------------------------------------------------- auctions
 
@@ -540,6 +579,19 @@ export interface AuctionState {
   interactive: boolean;
   /** Real-time presentation state for the interactive auction room (see world/auction-live). */
   live?: LiveAuction;
+  /** Registration summary: everyone eligible, those entered into the catalogue, and those offered as lots. */
+  registration?: AuctionRegistration;
+}
+
+export interface AuctionRegistration {
+  /** Every uncontracted, eligible senior player in the world. */
+  eligible: number;
+  /** Players registered for this auction (eligible for at least one club in it). */
+  registered: number;
+  /** Players offered in the main catalogue (sets). The rest can be called in the accelerated round. */
+  catalogued: number;
+  /** Rule used to choose the catalogue. */
+  rule: string;
 }
 
 export type AuctionPhase =
@@ -734,7 +786,7 @@ export interface SeasonChronicle {
   sections: { title: string; items: string[] }[];
 }
 
-export type SeasonPhase = 'retention' | 'auction' | 'preseason' | 'season' | 'wcc' | 'offseason';
+export type SeasonPhase = 'retention' | 'auction' | 'preseason' | 'season' | 'wcc' | 'international' | 'offseason';
 export type Difficulty = 'rookie' | 'professional' | 'elite' | 'legend';
 
 export interface Rivalry {
@@ -793,6 +845,10 @@ export interface WorldState {
   matchImpacts: Record<string, MatchImpact>;
   /** Inbox, news events, conversations, promises, boardroom, media and the cricket feed. */
   clubWorld: ClubWorld;
+  /** 'pyramid' = global divisions (new careers); 'leagues' = the original national leagues (older saves). */
+  worldModel?: 'pyramid' | 'leagues';
+  /** Pyramid, continental, preseason and international state (pyramid careers). */
+  universe?: UniverseState;
 }
 
 export interface StandingSnapshot {

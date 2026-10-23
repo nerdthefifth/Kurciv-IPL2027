@@ -7,7 +7,7 @@ const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.len
 describe('auction economics', () => {
   for (const mode of ['assistant', 'without-me'] as const) {
     it(`skip (${mode}) runs the live engine to completion with valid budgets and squads`, () => {
-      const w = createWorld({ managerName: 'Econ', difficulty: 'professional', clubId: 'CHE', careerId: 'x', seed: `econ-${mode}` });
+      const w = createWorld({ managerName: 'Econ', difficulty: 'professional', clubId: 'CHE', careerId: 'x', seed: `econ-${mode}`, worldModel: 'leagues' });
       const a = Object.values(w.auctions).find((x) => x.interactive)!;
       fastForward(w, a, mode);
       expect(a.status).toBe('complete');
@@ -26,7 +26,7 @@ describe('auction economics', () => {
   }
 
   it('until-flagged stops when a shortlisted player is introduced', () => {
-    const w = createWorld({ managerName: 'Flag', difficulty: 'professional', clubId: 'CHE', careerId: 'x', seed: 'flag' });
+    const w = createWorld({ managerName: 'Flag', difficulty: 'professional', clubId: 'CHE', careerId: 'x', seed: 'flag', worldModel: 'leagues' });
     const a = Object.values(w.auctions).find((x) => x.interactive)!;
     const target = a.lots[30];
     liveCommand(w, a, { type: 'flag', playerId: target.playerId, flagged: true });
@@ -37,7 +37,7 @@ describe('auction economics', () => {
   }, 120_000);
 
   it('the bid clock lengthens bidding windows', () => {
-    const w = createWorld({ managerName: 'Clock', difficulty: 'professional', clubId: 'CHE', careerId: 'x', seed: 'clock' });
+    const w = createWorld({ managerName: 'Clock', difficulty: 'professional', clubId: 'CHE', careerId: 'x', seed: 'clock', worldModel: 'leagues' });
     const a = Object.values(w.auctions).find((x) => x.interactive)!;
     expect(liveCommand(w, a, { type: 'clock', setting: 'relaxed' }).ok).toBe(true);
     liveCommand(w, a, { type: 'begin' });

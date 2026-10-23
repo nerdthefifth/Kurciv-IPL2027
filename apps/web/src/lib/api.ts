@@ -117,7 +117,7 @@ export const BOWL_LABEL: Record<string, string> = {
   OB: 'Off-break', LB: 'Leg-break', SLA: 'Slow left-arm orthodox', SLC: 'Left-arm wrist spin', NONE: 'Does not bowl',
 };
 export const PHASE_LABEL: Record<string, string> = {
-  retention: 'Retention window', auction: 'Auction', preseason: 'Pre-season', season: 'Season', wcc: 'World Club Championship', offseason: 'Season review',
+  retention: 'Retention window', auction: 'Auction', preseason: 'Pre-season', season: 'Season', wcc: 'Club championships', international: 'International window', offseason: 'Season review',
 };
 
 export function dayLabel(season: number, day: number): string {

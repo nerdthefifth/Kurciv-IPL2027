@@ -7,7 +7,7 @@ import type { AuctionPersonality, CountryCode, LeagueConfig, SquadRules, Auction
  * as logos are not shipped. Every name here can be edited without touching game logic.
  */
 
-const franchiseRules = (over: Partial<SquadRules> = {}): SquadRules => ({
+export const franchiseRules = (over: Partial<SquadRules> = {}): SquadRules => ({
   maxSquad: 25,
   minSquad: 18,
   maxOverseas: 5,
@@ -19,7 +19,7 @@ const franchiseRules = (over: Partial<SquadRules> = {}): SquadRules => ({
   ...over,
 });
 
-const auction = (purse: number, minBase: number, over: Partial<AuctionRules> = {}): AuctionRules => {
+export const auctionRulesFor = (purse: number, minBase: number, over: Partial<AuctionRules> = {}): AuctionRules => {
   const s = purse / 120;
   const r = (v: number) => Math.max(0.01, Math.round(v * s * 100) / 100);
   return {
@@ -42,77 +42,77 @@ export const LEAGUES: LeagueConfig[] = [
   {
     id: 'IPL', name: 'Indian Premier League', shortName: 'IPL', country: 'IND', region: 'Asia', fictional: false,
     initialReputation: 95, commercialValue: 98, audience: 99, format: 'T20', rounds: 2, playoffs: 'ipl4',
-    squadRules: franchiseRules(), auctionRules: auction(120, 0.3), domesticCountries: ['IND'], seasonStartDay: 80,
+    squadRules: franchiseRules(), auctionRules: auctionRulesFor(120, 0.3), domesticCountries: ['IND'], seasonStartDay: 80,
     prizeMoney: { champion: 20, runnerUp: 12.5, playoff: 7 },
   },
   {
     id: 'SXT', name: 'Big Bash League', shortName: 'BBL', country: 'AUS', region: 'Oceania', fictional: false,
     initialReputation: 79, commercialValue: 80, audience: 78, format: 'T20', rounds: 2, playoffs: 'ipl4',
     squadRules: franchiseRules({ maxSquad: 19, minSquad: 15, maxOverseas: 4, maxOverseasInXI: 3, maxRetentions: 6, retentionCosts: [3.5, 3, 2.5, 2.5, 2, 2], uncappedRetentionCost: 0.8 }),
-    auctionRules: auction(28, 0.08), domesticCountries: ['AUS'], seasonStartDay: 80,
+    auctionRules: auctionRulesFor(28, 0.08), domesticCountries: ['AUS'], seasonStartDay: 80,
     prizeMoney: { champion: 5, runnerUp: 3, playoff: 1.5 },
   },
   {
     id: 'ALB', name: 'Vitality Blast', shortName: 'Blast', country: 'ENG', region: 'Europe', fictional: false,
     initialReputation: 76, commercialValue: 78, audience: 74, format: 'T20', rounds: 2, playoffs: 'semis',
     squadRules: franchiseRules({ maxSquad: 19, minSquad: 15, maxOverseas: 4, maxOverseasInXI: 3, retentionCosts: [3.5, 3, 2.5, 2.5, 2, 2], uncappedRetentionCost: 0.8 }),
-    auctionRules: auction(26, 0.08), domesticCountries: ['ENG', 'IRE', 'SCO'], seasonStartDay: 80,
+    auctionRules: auctionRulesFor(26, 0.08), domesticCountries: ['ENG', 'IRE', 'SCO'], seasonStartDay: 80,
     prizeMoney: { champion: 4.5, runnerUp: 2.5, playoff: 1.2 },
   },
   {
     id: 'PRT', name: 'SA20', shortName: 'SA20', country: 'SA', region: 'Africa', fictional: false,
     initialReputation: 74, commercialValue: 70, audience: 66, format: 'T20', rounds: 2, playoffs: 'ipl4',
     squadRules: franchiseRules({ maxSquad: 19, minSquad: 15, maxOverseas: 5, maxOverseasInXI: 4, retentionCosts: [3, 2.5, 2, 2, 1.5, 1.5], uncappedRetentionCost: 0.6 }),
-    auctionRules: auction(24, 0.07), domesticCountries: ['SA', 'NAM'], seasonStartDay: 80,
+    auctionRules: auctionRulesFor(24, 0.07), domesticCountries: ['SA', 'NAM'], seasonStartDay: 80,
     prizeMoney: { champion: 4, runnerUp: 2, playoff: 1 },
   },
   {
     id: 'IND2', name: 'Pakistan Super League', shortName: 'PSL', country: 'PAK', region: 'Asia', fictional: false,
     initialReputation: 70, commercialValue: 62, audience: 80, format: 'T20', rounds: 2, playoffs: 'ipl4',
     squadRules: franchiseRules({ maxSquad: 19, minSquad: 15, maxOverseas: 5, maxOverseasInXI: 4, retentionCosts: [2.5, 2, 1.8, 1.8, 1.5, 1.5], uncappedRetentionCost: 0.5 }),
-    auctionRules: auction(18, 0.05), domesticCountries: ['PAK'], seasonStartDay: 80,
+    auctionRules: auctionRulesFor(18, 0.05), domesticCountries: ['PAK'], seasonStartDay: 80,
     prizeMoney: { champion: 3, runnerUp: 1.6, playoff: 0.8 },
   },
   {
     id: 'DES', name: 'International League T20', shortName: 'ILT20', country: 'UAE', region: 'Asia', fictional: false,
     initialReputation: 69, commercialValue: 68, audience: 52, format: 'T20', rounds: 2, playoffs: 'ipl4',
     squadRules: franchiseRules({ maxSquad: 19, minSquad: 15, maxOverseas: 9, maxPerOverseasCountry: 3, maxOverseasInXI: 7, retentionCosts: [3, 2.5, 2, 2, 1.5, 1.5], uncappedRetentionCost: 0.5 }),
-    auctionRules: auction(24, 0.06), domesticCountries: ['UAE', 'OMA'], seasonStartDay: 80,
+    auctionRules: auctionRulesFor(24, 0.06), domesticCountries: ['UAE', 'OMA'], seasonStartDay: 80,
     prizeMoney: { champion: 3.5, runnerUp: 1.8, playoff: 0.9 },
   },
   {
     id: 'CAR', name: 'Caribbean Premier League', shortName: 'CPL', country: 'WI', region: 'Americas', fictional: false,
     initialReputation: 66, commercialValue: 55, audience: 64, format: 'T20', rounds: 2, playoffs: 'semis',
     squadRules: franchiseRules({ maxSquad: 18, minSquad: 15, maxOverseas: 5, maxOverseasInXI: 4, retentionCosts: [2, 1.6, 1.4, 1.4, 1.2, 1.2], uncappedRetentionCost: 0.4 }),
-    auctionRules: auction(13, 0.04), domesticCountries: ['WI'], seasonStartDay: 80,
+    auctionRules: auctionRulesFor(13, 0.04), domesticCountries: ['WI'], seasonStartDay: 80,
     prizeMoney: { champion: 2.2, runnerUp: 1.2, playoff: 0.6 },
   },
   {
     id: 'LIB', name: 'Major League Cricket', shortName: 'MLC', country: 'USA', region: 'Americas', fictional: false,
     initialReputation: 64, commercialValue: 66, audience: 45, format: 'T20', rounds: 2, playoffs: 'semis',
     squadRules: franchiseRules({ maxSquad: 18, minSquad: 15, maxOverseas: 8, maxPerOverseasCountry: 3, maxOverseasInXI: 6, retentionCosts: [3, 2.5, 2, 2, 1.5, 1.5], uncappedRetentionCost: 0.5 }),
-    auctionRules: auction(22, 0.06), domesticCountries: ['USA', 'CAN'], seasonStartDay: 80,
+    auctionRules: auctionRulesFor(22, 0.06), domesticCountries: ['USA', 'CAN'], seasonStartDay: 80,
     prizeMoney: { champion: 3, runnerUp: 1.6, playoff: 0.8 },
   },
   {
     id: 'AOT', name: 'Super Smash', shortName: 'Smash', country: 'NZ', region: 'Oceania', fictional: false,
     initialReputation: 58, commercialValue: 48, audience: 50, format: 'T20', rounds: 2, playoffs: 'final2',
     squadRules: franchiseRules({ maxSquad: 18, minSquad: 15, maxOverseas: 4, maxOverseasInXI: 3, retentionCosts: [1.6, 1.4, 1.2, 1.2, 1, 1], uncappedRetentionCost: 0.3 }),
-    auctionRules: auction(10, 0.03), domesticCountries: ['NZ'], seasonStartDay: 80,
+    auctionRules: auctionRulesFor(10, 0.03), domesticCountries: ['NZ'], seasonStartDay: 80,
     prizeMoney: { champion: 1.5, runnerUp: 0.8, playoff: 0.4 },
   },
   {
     id: 'LNK', name: 'Lanka Premier League', shortName: 'LPL', country: 'SL', region: 'Asia', fictional: false,
     initialReputation: 58, commercialValue: 45, audience: 60, format: 'T20', rounds: 2, playoffs: 'final2',
     squadRules: franchiseRules({ maxSquad: 18, minSquad: 15, maxOverseas: 5, maxOverseasInXI: 4, retentionCosts: [1.4, 1.2, 1, 1, 0.8, 0.8], uncappedRetentionCost: 0.3 }),
-    auctionRules: auction(9, 0.03), domesticCountries: ['SL'], seasonStartDay: 80,
+    auctionRules: auctionRulesFor(9, 0.03), domesticCountries: ['SL'], seasonStartDay: 80,
     prizeMoney: { champion: 1.2, runnerUp: 0.7, playoff: 0.3 },
   },
   {
     id: 'BAY', name: 'Bangladesh Premier League', shortName: 'BPL', country: 'BAN', region: 'Asia', fictional: false,
     initialReputation: 55, commercialValue: 44, audience: 70, format: 'T20', rounds: 2, playoffs: 'final2',
     squadRules: franchiseRules({ maxSquad: 18, minSquad: 15, maxOverseas: 5, maxOverseasInXI: 4, retentionCosts: [1.4, 1.2, 1, 1, 0.8, 0.8], uncappedRetentionCost: 0.3 }),
-    auctionRules: auction(9, 0.03), domesticCountries: ['BAN'], seasonStartDay: 80,
+    auctionRules: auctionRulesFor(9, 0.03), domesticCountries: ['BAN'], seasonStartDay: 80,
     prizeMoney: { champion: 1.2, runnerUp: 0.7, playoff: 0.3 },
   },
 ];
@@ -235,11 +235,6 @@ export const CLUB_SEEDS: Record<string, ClubSeed[]> = {
   ],
 };
 
-export function leagueById(id: string): LeagueConfig {
-  const l = LEAGUES.find((x) => x.id === id);
-  if (!l) throw new Error(`Unknown league ${id}`);
-  return l;
-}
 
 export const COUNTRY_NAMES: Record<CountryCode, string> = Object.fromEntries(COUNTRIES.map((c) => [c.code, c.name])) as Record<CountryCode, string>;
 

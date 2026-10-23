@@ -43,7 +43,7 @@ function checkRegistrations(w: WorldState) {
 
 describe('live auction room', () => {
   it('opens in the lobby, then paces lots through every phase', () => {
-    const w = createWorld({ careerId: 'l1', seed: 'live-1', managerName: 'T', difficulty: 'professional', clubId: 'CHE' });
+    const w = createWorld({ careerId: 'l1', seed: 'live-1', managerName: 'T', difficulty: 'professional', clubId: 'CHE', worldModel: 'leagues' });
     const a = userAuction(w);
     expect(a.live!.phase).toBe('PREPARATION');
     expect(liveTick(w, a, 10_000)).toBe(false); // nothing happens before the user begins
@@ -55,7 +55,7 @@ describe('live auction room', () => {
     }
     expect([...phases]).toEqual(expect.arrayContaining(['PLAYER_INTRODUCTION', 'OPEN_FOR_BIDS']));
     // Bids arrive over time, not all at once: the first lot is not resolved in a single tick.
-    const fresh = createWorld({ careerId: 'l2', seed: 'live-1', managerName: 'T', difficulty: 'professional', clubId: 'CHE' });
+    const fresh = createWorld({ careerId: 'l2', seed: 'live-1', managerName: 'T', difficulty: 'professional', clubId: 'CHE', worldModel: 'leagues' });
     const b = userAuction(fresh);
     liveCommand(fresh, b, { type: 'begin' });
     liveTick(fresh, b, 3000); // intro over, bidding opens
@@ -67,7 +67,7 @@ describe('live auction room', () => {
   });
 
   it('a full live auction completes with every rule respected and varied AI targets', () => {
-    const w = createWorld({ careerId: 'l3', seed: 'live-full', managerName: 'T', difficulty: 'professional', clubId: 'CHE' });
+    const w = createWorld({ careerId: 'l3', seed: 'live-full', managerName: 'T', difficulty: 'professional', clubId: 'CHE', worldModel: 'leagues' });
     const a = runRoom(w);
     expect(a.status).toBe('complete');
     checkRegistrations(w);
@@ -83,7 +83,7 @@ describe('live auction room', () => {
   }, 300_000);
 
   it('the user can bid, be outbid, respond and win — and is charged correctly', () => {
-    const w = createWorld({ careerId: 'l4', seed: 'live-bid', managerName: 'T', difficulty: 'professional', clubId: 'CHE' });
+    const w = createWorld({ careerId: 'l4', seed: 'live-bid', managerName: 'T', difficulty: 'professional', clubId: 'CHE', worldModel: 'leagues' });
     const a = userAuction(w);
     liveCommand(w, a, { type: 'begin' });
     const purseBefore = w.clubs.CHE.purse;
@@ -111,7 +111,7 @@ describe('live auction room', () => {
   });
 
   it('rejects bids that break rules with the exact reason', () => {
-    const w = createWorld({ careerId: 'l5', seed: 'live-rules', managerName: 'T', difficulty: 'professional', clubId: 'CHE' });
+    const w = createWorld({ careerId: 'l5', seed: 'live-rules', managerName: 'T', difficulty: 'professional', clubId: 'CHE', worldModel: 'leagues' });
     const a = userAuction(w);
     liveCommand(w, a, { type: 'begin' });
     expect(liveCommand(w, a, { type: 'bid' }).error).toMatch(/opens in a moment/);
@@ -127,7 +127,7 @@ describe('live auction room', () => {
 
   it('recovers exactly after a "refresh" (state round-trips through serialisation)', () => {
     const run = (refreshAt: number | null) => {
-      let w = createWorld({ careerId: 'l6', seed: 'live-recover', managerName: 'T', difficulty: 'professional', clubId: 'CHE' });
+      let w = createWorld({ careerId: 'l6', seed: 'live-recover', managerName: 'T', difficulty: 'professional', clubId: 'CHE', worldModel: 'leagues' });
       liveCommand(w, userAuction(w), { type: 'begin' });
       for (let i = 0; i < 600; i++) {
         if (i === refreshAt) w = JSON.parse(JSON.stringify(w)) as WorldState;
@@ -141,7 +141,7 @@ describe('live auction room', () => {
 
   it('is deterministic for the same seed and inputs', () => {
     const go = () => {
-      const w = createWorld({ careerId: 'l7', seed: 'live-det', managerName: 'T', difficulty: 'professional', clubId: 'MUM' });
+      const w = createWorld({ careerId: 'l7', seed: 'live-det', managerName: 'T', difficulty: 'professional', clubId: 'MUM', worldModel: 'leagues' });
       const a = userAuction(w);
       liveCommand(w, a, { type: 'begin' });
       for (let i = 0; i < 2000; i++) liveTick(w, a, 250);

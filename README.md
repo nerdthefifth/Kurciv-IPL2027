@@ -1,10 +1,10 @@
 # Kurciv IPL 2027
 
-**A T20 cricket management game that runs entirely in your browser.**
+**A cricket management game that runs entirely in your browser.**
 
 **▶ Play it now: [kurciv-ipl-2027.vercel.app](https://kurciv-ipl-2027.vercel.app/)**
 
-You take charge of one franchise in one of 11 leagues. Bid for your squad in a live auction, pick your XI and captain, play every match ball by ball in 3D or simulate it, and manage the people: players who want answers, a board that judges you, and a cricket world that reacts to everything you do. Every other club, auction and match in the world is run by AI through the same engine.
+You take charge of one of 90 clubs in a five-division global pyramid. Bid for your squad in a live auction, arrange preseason friendlies, pick your XI and captain, and play every match ball by ball in 3D or simulate it. Chase promotion and continental cups, and manage a national side in Tests, ODIs and T20Is. You also manage the people: players who want answers, a board that judges you, and a cricket world that reacts to everything you do. Every other club, auction and match in the world is run by AI through the same engine.
 
 ![A delivery in the 3D match view, with the broadcast score bar](docs/images/match-3d.jpg)
 
@@ -15,9 +15,16 @@ There is nothing to install and no account to create. Careers are saved in your 
 ## Features
 
 ### On the field
-- **Ball-by-ball T20 engine.** Every delivery resolves line, length, shot choice, timing, ball flight, fielding and running between the wickets. Matches are seeded and fully replayable.
+- **Ball-by-ball engine for T20, ODI and Test cricket.** Every delivery resolves line, length, shot choice, timing, ball flight, fielding and running between the wickets. Matches are seeded and fully replayable.
 - **Realistic scoring.** Calibrated to about 7–8 runs an over with realistic wickets, dot balls and boundaries, guarded by an automated calibration test. See [docs/BALANCE_REPORT.md](docs/BALANCE_REPORT.md).
-- **3D match view.** Cricketers in your franchise's kit, a stadium with crowd and floodlights, broadcast-style cameras, replays and DRS ball tracking. The 3D view only replays what the engine decided, so it can never change a result. A 2D scoreboard view is available, and is used automatically when 3D isn't supported.
+- **3D match view with a shader renderer.** Cricketers in your club's kit and broadcast-style cameras, with replays and DRS ball tracking. The renderer adds:
+  - PBR materials;
+  - a GLSL outfield and a GLSL pitch that wears through the match;
+  - day and floodlit skies, shadows, bloom and a colour grade;
+  - a seamed ball with a trail;
+  - each venue's own stands, roof, lights and skyline.
+
+  There are four graphics presets (Low, Medium, High and Ultra). The 3D view only replays what the engine decided, so it can never change a result. A 2D scoreboard view is available, and is used automatically when 3D isn't supported.
 - **You make the calls.** Toss, openers, every bowler, every incoming batter, batting approach and DRS reviews. Play continuously, ball by ball or over by over, or simulate the rest instantly.
 - **Pre-match selection.** Choose your XI and batting order before each match. AI clubs select for the pitch and rest tired players.
 
@@ -27,9 +34,15 @@ There is nothing to install and no account to create. Careers are saved in your 
 - **Squad management:** fatigue, injuries, form, morale, training, youth academy, finances and retentions.
 
 ### The world
-- **11 leagues and 73 clubs**, plus a 50-club World Club Championship that moves league reputations.
-- **Orange and Purple Cap** races for every league, with cap holders marked in matches.
-- **Player database** of 10,000 players, built from licensed Cricsheet data.
+- **Global pyramid.** Five divisions of 18 clubs (73 real franchises and 17 fictional clubs) from every region. Promotion and relegation every season, with parachute payments and promotion bonuses. See [docs/UNIVERSE.md](docs/UNIVERSE.md).
+- **Continental cups.** A Champions Cup and a Shield in Asia, Europe, Africa, the Americas and Oceania, with neutral finals. Then a 16-club Global Club Championship.
+- **Preseason friendlies.** Choose the opponent, ground, date, purpose and whether you play, watch or simulate, with a preview of the effects. AI clubs arrange their own.
+- **International cricket.** 24 nations with AI managers. Bilateral Test, ODI and T20I tours, a tri-series, an associate qualifier, regional cups and rotating world events, with rankings. Call-ups take players away from their clubs. You can accept a national job and pick the squads yourself.
+- **Test, ODI and T20 engines.** Tests have two innings each over five days, sessions, declarations, the follow-on and draws.
+- **About 13,500 players.** Around 3,460 real players from licensed Cricsheet data and 10,000 clearly labelled fictional players. The game shows total, contracted, auction-eligible and registered counts separately.
+- **81 stadiums** (17 fictional) with capacity, pitch, boundaries, climate and a visual identity used in 3D.
+- **Orange and Purple Cap** races for every division, with cap holders marked in matches.
+- **Classic mode.** The original 11 national leagues and the 50-club World Club Championship remain available, and older saves keep them.
 
 ### Club World
 - **Inbox:** decisions with deadlines from the board, staff, media and players.
@@ -69,6 +82,8 @@ npm run preview    # serves the build locally
 | `npm run e2e` | Browser tests (Playwright, Edge channel) |
 | `npm run typecheck` | Strict TypeScript across every package and the web app |
 | `npm run lab -- 2000` | Plays N seeded matches and prints a balance report |
+| `npm run format-lab -- Test 20` | Plays seeded Tests, ODIs or T20s and prints the distributions |
+| `npm run universe-smoke -- MUM 1` | Builds a pyramid world and plays whole seasons (auctions, cups, internationals, promotion) |
 | `npm run world-report -- <seed>` | Plays a whole world season and prints auctions, tables and reputation changes |
 | `npm run ingest -- --download` | Rebuilds the player database from Cricsheet (downloads about 150 MB to `data/cache`) |
 | `npm run validate-data` | Validates the curated player seed |
@@ -84,11 +99,12 @@ TypeScript monorepo (npm workspaces): React 18 + Vite + Tailwind for the UI, thr
 ```
 apps/web/              React client, 3D match view (pages/match/three), engine Web Worker
 packages/domain/       Entity types, ratings, registration rules, Club World types
-packages/config/       Leagues, clubs, venues, engine constants (SIM), world config
+packages/config/       Leagues, divisions, clubs, stadium catalogue, regions, nations, engine constants (SIM), world config
 packages/simulation/   Seeded RNG, field geometry, shot model, ball-by-ball engine, awards, win probability
 packages/ai/           Captain AI, XI selection, match runner and replay
 packages/world/        Career, auctions, competitions, calendar, condition, finance, WCC, seasons,
-                       captaincy and cap races, Club World (event bus, inbox, conversations, board, media)
+                       captaincy and cap races, Club World (event bus, inbox, conversations, board, media),
+                       universe/ (pyramid, continental cups, preseason, international cricket, lifecycle)
 packages/app-core/     Storage-agnostic backend (route table), views, match reports, IndexedDB adapter
 packages/data-ingestion/  Curated players, the 10,000-player database, generated players
 tools/                 Simulation lab, world report, Cricsheet ingestion
@@ -99,6 +115,7 @@ docs/                  Documentation (below)
 ## Documentation
 
 - [Gameplay guide](docs/GAMEPLAY.md)
+- [The global universe](docs/UNIVERSE.md): pyramid, cups, friendlies, international cricket, formats, population, stadiums, renderer
 - [Architecture](docs/ARCHITECTURE.md): layers, the worker backend, determinism, the match engine, the Club World event bus, 3D presentation
 - [Persistence](docs/DATABASE.md): saves, IndexedDB tables, backups and migrations
 - [Configuration](docs/CONFIGURATION.md): leagues, squad rules, auctions and engine constants

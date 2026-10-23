@@ -95,7 +95,13 @@ export function clubhouse(w: WorldState) {
   if (w.phase === 'auction' && a?.status === 'live') decisions.push({ label: a.live?.phase === 'PREPARATION' ? 'Prepare for the auction' : 'Return to the auction room', detail: `${a.lots.filter((x) => x.status === 'pending').length} lots remaining.`, page: 'auction', urgency: 'high' });
   const problems = squadProblems(w, u);
   if (w.phase === 'preseason' && problems.length) decisions.push({ label: 'Complete your squad', detail: problems[0], page: 'transfers', urgency: 'high' });
-  if (w.phase === 'preseason' && !problems.length) decisions.push({ label: 'Start the season', detail: 'Your squad is registered. Set your XI and tactics, then begin.', page: '', urgency: 'normal' });
+  const pyramid = w.worldModel === 'pyramid';
+  const pendingFriendlies = Object.values(w.fixtures).filter((f) => f.involvesUser && f.status === 'scheduled' && f.mode && f.mode !== 'sim' && f.season === w.season).length;
+  if (w.phase === 'preseason' && pyramid && !problems.length) decisions.push({ label: 'Arrange preseason friendlies', detail: 'Pick opponents, grounds, dates and purposes before the season starts.', page: 'preseason', urgency: 'normal' });
+  const offers = w.universe?.international.offers.length ?? 0;
+  if (offers && !w.universe?.international.userNationId) decisions.push({ label: 'National-team job offer', detail: `${offers} nation${offers === 1 ? '' : 's'} would like you to manage them alongside your club.`, page: 'international', urgency: 'normal' });
+  if (w.phase === 'international') decisions.push({ label: 'The international window is open', detail: 'Club cricket is over for the season. Follow the world events, then begin the off-season.', page: 'international', urgency: 'normal' });
+  if (w.phase === 'preseason' && !problems.length) decisions.push({ label: pendingFriendlies ? 'Play your friendlies, then start the season' : 'Start the season', detail: 'Your squad is registered. Set your XI and tactics, then begin.', page: '', urgency: 'normal' });
   if (next && next.day === w.day) decisions.push({ label: 'Match day', detail: `${fixtureView(w, next).homeName} v ${fixtureView(w, next).awayName} — pick your XI and play.`, page: 'match', urgency: 'high' });
   if (!u.lineup && squad.length >= 11 && (w.phase === 'season' || w.phase === 'preseason')) decisions.push({ label: 'Select your XI', detail: 'The assistant is picking the side. Set your own XI and batting order.', page: 'squad', urgency: 'normal' });
   const injured = squad.filter((p) => p.injury);
@@ -107,6 +113,7 @@ export function clubhouse(w: WorldState) {
   return {
     clubWorld: inboxCounts(w),
     season: w.season, day: w.day, phase: w.phase, managerName: w.managerName, difficulty: w.difficulty, settings: w.settings,
+    worldModel: w.worldModel ?? 'leagues', pendingFriendlies,
     club: clubView(w, u),
     nextChapter: next ? { fixture: fixtureView(w, next), ...fixturePreview(w, next), today: next.day === w.day } : null,
     dressingRoom: {

@@ -20,10 +20,10 @@ Kurciv runs entirely in the browser. The React interface talks to a backend that
 | Package | Responsibility |
 | --- | --- |
 | `domain` | Entity types, derived ratings (`overall`, `battingRating`…), registration rules (`validateXI`, `canRegister`), countries, Club World types |
-| `config` | League registry, club seeds, venues, engine constants (`SIM`), world configuration, feature flags |
-| `simulation` | Seeded RNG (sfc32), field geometry, shot catalogue, the ball-by-ball engine, DRS evidence, Player of the Match model, win probability, commentary |
+| `config` | League and division registry, club seeds (real and fictional), the stadium catalogue, regions, nations, engine constants (`SIM`), world configuration, feature flags |
+| `simulation` | Seeded RNG (sfc32), field geometry, shot catalogue, the ball-by-ball engine for T20, ODI and Test rules, DRS evidence, Player of the Match model, win probability, commentary |
 | `ai` | Captain AI (bowling changes, plans, batting intent, order, reviews), XI selection (pitch-aware), match runner and exact replay |
-| `world` | Career creation, auction cascade and bidding AI, competitions, calendar, fatigue, injuries, morale, development, finance, board, World Club Championship, retentions, captaincy, cap races, and the Club World |
+| `world` | Career creation, auction cascade and bidding AI, competitions, calendar, fatigue, injuries, morale, development, finance, board, World Club Championship, retentions, captaincy, cap races, the Club World, and `universe/` (pyramid, continental cups, preseason friendlies, international cricket, phase lifecycle) |
 | `data-ingestion` | Curated players, the 10,000-player database built from Cricsheet, generated players, validation |
 | `app-core` | The storage-agnostic `Backend` (a route table such as `GET /careers/:cid/squad`), views, match reports, save portability, and the IndexedDB adapter |
 | `apps/web` | UI only. It sends decisions and renders state; it never decides an outcome |
@@ -50,6 +50,7 @@ Live matches have their own slot (`main`, or `lab` for Scenario Lab replays) wit
 - AI decisions use visible state and seeded hashes, never `Math.random()`.
 - World events draw from `worldRng(w, label)`, derived from the career seed, the season and a label. The same seed and the same decisions give the same world.
 - Every stored match keeps its seed and `engineVersion` (currently `kurciv-t20-1.3.0`).
+- Pyramid seeding, promotion and relegation, generated players (`f-<country>-<n>`), friendlies chosen by AI clubs and international schedules all derive from the career seed and the configuration.
 
 ## The match engine (`packages/simulation/src/engine.ts`)
 
@@ -66,6 +67,20 @@ Each delivery is resolved in this order:
 
 About 80 tunable constants live in `packages/config/src/simulation.ts` (`SIM`). `packages/ai/src/__tests__/calibration.test.ts` fails if scoring drifts out of the target band (see [BALANCE_REPORT.md](BALANCE_REPORT.md)).
 
+## The global universe (`packages/world/src/universe/`)
+
+A career has a `worldModel`: `'pyramid'` for new careers, or `'leagues'` for older saves. Every place that used to loop over the national leagues now calls `activeLeagues(w)`, and every overseas or registration check now asks `domesticOf(club)`. The same auction, competition, playoff, award and board code therefore runs unchanged on divisions.
+
+- `pyramid.ts`: seeding, the membership snapshot, deterministic promotion and relegation, parachute payments and bonuses.
+- `continental.ts`: qualification scores, regional cups (groups, semi-finals, neutral finals), coefficients, and Global Club Championship qualifiers. The championship reuses the World Club Championship engine with an explicit entrant list and regional hosting.
+- `preseason.ts`: friendly validation, preview, booking and cancellation; AI friendlies; reduced-weight effects.
+- `international.ts`: nations, format ratings, squad selection, call-ups and duty, scheduling for both windows, simulated international matches, tournament progression, rankings, appointments and squads.
+- `lifecycle.ts`: `enterPreseason`, which tops up a short user squad, schedules AI friendlies and the preseason internationals, refreshes job offers and records divisional membership.
+
+**Season cycle (pyramid).** Retention → auction cascade (divisions in tier order) → preseason (friendlies and internationals) → divisional season → continental cups → Global Club Championship → international window → off-season. The off-season covers promotion and relegation, awards, development, coefficients and rankings.
+
+**Calendar guarantees.** League fixtures are round-based, so a club plays at most once a day. Cups and the Global Club Championship start only after every division is complete. International windows sit in the preseason and after the club season, and a nation is never booked twice on one day (Tests occupy five days). Club selection skips players on duty.
+
 ## Club World (`packages/world/src/clubworld/`)
 
 One event log drives the inbox, news, conversations, promises, boardroom and social feed, so they can never contradict each other.
@@ -81,6 +96,11 @@ The 3D view is lazy-loaded and never decides anything.
 - **Playback.** When a ball is played, the worker resolves it first. The view then animates the recorded event (line, length, speed, shot, contact, angle, where the ball finished, who fielded it, the dismissal), and only after that does the score update.
 - **Fielders.** `fieldForDelivery` (in the engine) reports exactly where each fielder stood.
 - **Players.** The P3D Labs cricketer mesh is rigged at load time with a generated skeleton, and its bones follow a procedural animation rig. Kits are repainted per franchise.
+- **Renderer.** PBR materials with filmic tone mapping. `stadium.ts` injects GLSL into standard materials (`onBeforeCompile`):
+  - the outfield gets mowing stripes, fbm noise, wear around the square and a rough band by the rope;
+  - the pitch gets cracks and footmarks driven by a `uWear` uniform that rises through the match.
+
+  It also adds a gradient sky dome with a sun for day matches, floodlights for evening matches, and the venue's tiers, roof, light style, colours and skyline from its catalogue identity. `stage.ts` adds a seamed ball texture (red for Tests), a ball trail, and an optional post-processing chain (bloom, colour grade and vignette, loaded on demand). The presets (`PRESETS`: Low, Medium, High, Ultra) set pixel ratio, shadows, post-processing, crowd density, grass detail and trail length.
 - **Performance.** The render loop stops when nothing moves, and the resolution drops if frames slow down.
 - **Fallback.** Without WebGL, the 2D board is used.
 

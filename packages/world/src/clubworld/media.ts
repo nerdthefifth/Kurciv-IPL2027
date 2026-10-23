@@ -1,9 +1,9 @@
 import type { Club, Player, Rumour, SocialAccount, SocialPost, WorldEvent, WorldState } from '@kurciv/domain';
 import { ageOf, marketValue, overall } from '@kurciv/domain';
-import { LEAGUES, leagueById } from '@kurciv/config';
+import { leagueById } from '@kurciv/config';
 import { hash01, Rng } from '@kurciv/simulation';
 import { valuePlayer } from '../auction';
-import { addNews, clamp, nextId, squadOf } from '../util';
+import { activeLeagues, addNews, clamp, nextId, squadOf } from '../util';
 import { cw, emit, eventRng, isVisible, sendMessage, staff, subscribe, today } from './core';
 import { adjustRelation } from './relations';
 
@@ -51,7 +51,7 @@ export function ensureAccounts(w: WorldState) {
   for (const [name, handle, outlet, rep] of JOURNALISTS) add(acct(`j-${handle}`, { handle, name, kind: 'journalist', clubId: null, leagueId: null, bio: `Cricket correspondent, ${outlet}. In-game journalist.`, reputation: rep, followers: 40_000 + rep * 3000, mood: 0 }));
   for (const [name, handle, bio] of ANALYSTS) add(acct(`a-${handle}`, { handle, name, kind: 'analyst', clubId: null, leagueId: null, bio, reputation: 70, followers: 120_000, mood: 0 }));
   for (const [name, handle, bio] of PUNDITS) add(acct(`p-${handle}`, { handle, name, kind: 'former-player', clubId: null, leagueId: null, bio, reputation: 75, followers: 600_000, mood: hash01(handle) - 0.5 }));
-  for (const l of LEAGUES) add(acct(`lg-${l.id}`, { handle: `${l.shortName}_kurciv`, name: `${l.shortName} (in-game)`, kind: 'league', clubId: null, leagueId: l.id, bio: `In-game account for the ${l.name} in this career.`, reputation: 80, followers: 900_000, mood: 0 }));
+  for (const l of activeLeagues(w)) add(acct(`lg-${l.id}`, { handle: `${l.shortName}_kurciv`, name: `${l.shortName} (in-game)`, kind: 'league', clubId: null, leagueId: l.id, bio: `In-game account for the ${l.name} in this career.`, reputation: 80, followers: 900_000, mood: 0 }));
   for (const club of Object.values(w.clubs)) {
     add(acct(`club-${club.id}`, { handle: `${club.shortName}_kurciv`, name: `${club.name} (in-game)`, kind: 'club', clubId: club.id, leagueId: club.leagueId, bio: `In-game club account for ${club.name} in this career.`, reputation: 60 + club.brand * 0.3, followers: Math.round(50_000 + club.fanBase * 25_000), mood: 0.3 }));
     add(acct(`fans-${club.id}`, { handle: `${club.shortName}Army`, name: `${club.shortName} Army`, kind: 'supporters', clubId: club.id, leagueId: club.leagueId, bio: `Supporters' account for ${club.name}. Fictional.`, reputation: 40, followers: Math.round(5_000 + club.fanBase * 900), mood: hash01(`${club.id}m`) - 0.3 }));

@@ -77,7 +77,7 @@ export function SettingsPage() {
           <div className="space-y-5">
             <div>
               <div className="label mb-2">Theme</div>
-              <Segmented label="Theme" value={prefs.theme} onChange={(theme) => set({ theme })} options={[{ id: 'dark', label: 'Dark' }, { id: 'light', label: 'Light' }, { id: 'system', label: 'System' }]} />
+              <Segmented label="Theme" value={prefs.theme} onChange={(theme) => set({ theme })} options={[{ id: 'light', label: 'Cream & Burgundy' }, { id: 'dark', label: 'Smoked Wine' }, { id: 'system', label: 'System' }]} />
             </div>
             <Toggle label="Sound effects" hint="Gavel, bids, wickets and boundaries." value={prefs.sound} onChange={(sound) => set({ sound })} />
             <Toggle label="Animations" hint="Off reduces motion everywhere. Your system's reduced-motion setting is always respected." value={prefs.animations}

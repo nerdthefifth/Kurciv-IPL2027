@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Kurciv IPL 2027 — cricket management universe",
+  "description": "Kurciv IPL 2027 \u2014 cricket management universe",
   "engines": {
     "node": ">=22.13"
   },
@@ -21,7 +21,9 @@
     "lab": "tsx tools/sim-lab.ts",
     "world-report": "tsx tools/world-report.ts",
     "validate-data": "tsx packages/data-ingestion/src/cli.ts",
-    "ingest": "tsx tools/ingest-cricsheet.ts"
+    "ingest": "tsx tools/ingest-cricsheet.ts",
+    "format-lab": "tsx tools/format-lab.ts",
+    "universe-smoke": "tsx tools/universe-smoke.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",

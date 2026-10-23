@@ -50,6 +50,14 @@ export interface MatchRules {
   superOver: boolean;
   /** When a review comes back "umpire's call", the reviewing side keeps the review (ICC playing conditions). */
   umpiresCallRetainsReview?: boolean;
+  /** Match format (default T20). */
+  format?: 'T20' | 'ODI' | 'Test';
+  /** Overs at the end of a limited-overs innings treated as the death phase. */
+  deathOvers?: number;
+  /** Test cricket: days, overs per day and the follow-on margin. */
+  days?: number;
+  oversPerDay?: number;
+  followOn?: number;
 }
 
 export const T20_RULES: MatchRules = {
@@ -60,7 +68,41 @@ export const T20_RULES: MatchRules = {
   maxBowlerOvers: 4,
   reviews: 2,
   superOver: true,
+  format: 'T20',
+  deathOvers: 5,
 };
+
+export const ODI_RULES: MatchRules = {
+  overs: 50,
+  powerplayOvers: 10,
+  maxOutsidePP: 2,
+  maxOutside: 5,
+  maxBowlerOvers: 10,
+  reviews: 2,
+  superOver: false,
+  format: 'ODI',
+  deathOvers: 10,
+};
+
+/** Test cricket: two innings a side over five days of 90 overs; no bowling quotas, no fielding circle limits. */
+export const TEST_RULES: MatchRules = {
+  overs: 450,
+  powerplayOvers: 0,
+  maxOutsidePP: 9,
+  maxOutside: 9,
+  maxBowlerOvers: 999,
+  reviews: 3,
+  superOver: false,
+  format: 'Test',
+  deathOvers: 0,
+  days: 5,
+  oversPerDay: 90,
+  followOn: 200,
+};
+
+export function rulesFor(format: 'T20' | 'ODI' | 'Test'): MatchRules {
+  return format === 'Test' ? TEST_RULES : format === 'ODI' ? ODI_RULES : T20_RULES;
+}
 
 export interface MatchSetup {
   fixtureId: string;
@@ -225,6 +267,10 @@ export interface OverSummary {
 }
 
 export interface InningsState {
+  /** Test cricket: the innings was declared closed, a declaration is queued, or the side followed on. */
+  declared?: boolean;
+  declareRequested?: boolean;
+  followOn?: boolean;
   index: number;
   battingSide: Side;
   bowlingSide: Side;
@@ -288,7 +334,9 @@ export type MatchAction =
   | { type: 'intent'; value: number | null; batterId?: string }
   | { type: 'order'; order: string[] }
   | { type: 'review'; review: boolean }
-  | { type: 'openers'; strikerId: string; nonStrikerId: string };
+  | { type: 'openers'; strikerId: string; nonStrikerId: string }
+  | { type: 'declare' }
+  | { type: 'follow-on'; enforce: boolean };
 
 export interface LoggedAction {
   seq: number; // delivery sequence number at the time of the action
@@ -320,6 +368,8 @@ export interface MatchState {
   dew: boolean;
   /** Seeded per-match form swing for each player (rating points, ±7). */
   dayForm: Record<string, number>;
+  /** Test cricket: a side's standing choice on enforcing the follow-on. */
+  followOnChoice?: Partial<Record<Side, boolean>>;
 }
 
 export interface MatchResult {
@@ -327,6 +377,8 @@ export interface MatchResult {
   margin: string;
   superOver: boolean;
   playerOfMatch: string | null;
+  /** Test cricket: time ran out with no result. */
+  drawn?: boolean;
 }
 
 export type Controller = 'manual' | 'ai';
@@ -343,4 +395,8 @@ export interface Captain {
   battingIntent(s: MatchState, side: Side, batterId: string): number;
   battingOrder(s: MatchState, side: Side): string[] | null;
   review(s: MatchState, side: Side, ev: DeliveryEvent, perceivedOut: number): boolean;
+  /** Test cricket: declare the innings closed at the end of this over? */
+  declare?(s: MatchState, side: Side): boolean;
+  /** Test cricket: enforce the follow-on? */
+  followOn?(s: MatchState, side: Side, lead: number): boolean;
 }

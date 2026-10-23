@@ -22,13 +22,14 @@ Each change commits the career metadata, the world and any new match records in 
 
 ## Schema versions and migrations
 
-Every save records `schemaVersion` (currently **4**) and the game version. When an older save is loaded, `migrateWorld` (`packages/app-core/src/portability.ts`) upgrades it in place without discarding data:
+Every save records `schemaVersion` (currently **5**) and the game version. When an older save is loaded, `migrateWorld` (`packages/app-core/src/portability.ts`) upgrades it in place without discarding data:
 
 | From | Upgrade |
 | --- | --- |
 | < 2 | Adds the story, timeline, chronicle and appearance records |
 | < 3 | Adds match-impact snapshots |
 | < 4 | Adds the Club World and primes its cursors so past events are not replayed as new |
+| < 5 | Marks the career `worldModel: 'leagues'` so it keeps its national leagues, and adds a news notice that the global universe is available in new careers. New careers are created with `worldModel: 'pyramid'` and a `universe` object (pyramid history, continental records and coefficients, friendlies, nations, international events, fixtures and call-ups, calendar) |
 
 Some additions need no migration: missing captaincy is filled in on the next game day, and new engine tuning simply applies to matches played from then on (each stored match keeps the engine version that produced it).
 
@@ -42,4 +43,4 @@ Clearing the browser's site data deletes careers, so players should export backu
 
 ## Size
 
-A new world (about 6,000 players across 11 leagues) is roughly 10 MB in memory before compression. Delivery logs for every match in the world add to the `matches` table each season.
+A new pyramid world (about 13,500 players across five divisions, plus nations and international fixtures) is roughly 20–30 MB in memory before compression. A classic-leagues world (about 6,000 players) is roughly 10 MB. Delivery logs for every match in the world add to the `matches` table each season.

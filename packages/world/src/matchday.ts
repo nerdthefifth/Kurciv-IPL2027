@@ -1,6 +1,6 @@
 import type { Club, CountryCode, Fixture, InningsSummary, MatchResultSummary, Player, StatLine, WorldState } from '@kurciv/domain';
-import { emptyStatLine, isSpin, overall, validateXI } from '@kurciv/domain';
-import { leagueById, venueById } from '@kurciv/config';
+import { ageOf, emptyStatLine, isSpin, overall, validateXI } from '@kurciv/domain';
+import { domesticOf, leagueById, venueById } from '@kurciv/config';
 import { ENGINE_VERSION, T20_RULES, type MatchSetup, type MatchState, type Side } from '@kurciv/simulation';
 import { battingOrder, buildTeamSetup, explainXI, pickXI } from '@kurciv/ai';
 import { applyToStandings } from './competition';
@@ -11,6 +11,19 @@ import { addTimeline, storiesAfterUserMatch } from './story';
 import { beginImpact, completeImpact } from './impact';
 import { recordTeamSheet } from './clubworld/sync';
 import { leadershipEdge, matchCaptain } from './captaincy';
+import { playersOnDuty } from './universe/international';
+import { applyFriendlyEffects } from './universe/preseason';
+import { coefficientForMatch } from './universe/continental';
+
+/** Squad members free to play on the fixture's day (not on international duty). */
+function available(w: WorldState, _club: Club, squad: Player[], fx: Fixture): Player[] {
+  const duty = playersOnDuty(w, fx.day);
+  if (!duty.size) return squad;
+  const free = squad.filter((p) => !duty.has(p.id));
+  return free.length >= 11 ? free : squad;
+}
+
+const isFriendly = (w: WorldState, fx: Fixture) => w.competitions[fx.competitionId]?.kind === 'friendly';
 
 const DIFFICULTY_QUALITY = { rookie: 0.35, professional: 0.55, elite: 0.72, legend: 0.88 } as const;
 
@@ -23,6 +36,7 @@ export function tacticalQuality(w: WorldState, club: Club): number {
 }
 
 export function matchImportance(w: WorldState, fx: Fixture): number {
+  if (isFriendly(w, fx)) return 0.1;
   if (fx.stage === 'Final') return 1;
   if (fx.stage !== 'League' && !fx.group) return 0.85;
   if (fx.group) return 0.6;
@@ -32,9 +46,9 @@ export function matchImportance(w: WorldState, fx: Fixture): number {
   return played > total * 0.75 ? 0.45 : 0.3;
 }
 
-function domesticOf(w: WorldState, club: Club, fx: Fixture): CountryCode[] {
-  // WCC: each club fields its own league's registration rules.
-  return leagueById(club.leagueId).domesticCountries;
+function domesticFor(_w: WorldState, club: Club, _fx: Fixture): CountryCode[] {
+  // Every competition: each club fields its own registration rules.
+  return domesticOf(club);
 }
 
 /**
@@ -45,10 +59,22 @@ export function selectXI(w: WorldState, club: Club, fx: Fixture): { xi: Player[]
   const l = leagueById(club.leagueId);
   const squad = squadOf(w, club);
   const pitch = venueById(fx.venueId || w.clubs[fx.homeId].venueId).pitch;
-  const auto = () => pickXI(squad, l.squadRules, domesticOf(w, club, fx), pitch);
+  const auto = () => pickXI(available(w, club, squad, fx), l.squadRules, domesticFor(w, club, fx), pitch);
+  // Friendlies: the purpose shapes selection (fringe players for trials, under-23s for youth).
+  if (isFriendly(w, fx) && (fx.purpose === 'selection' || fx.purpose === 'youth') && (!club.isUser || !club.lineup?.length || fx.mode === 'sim')) {
+    const regulars = new Set(auto().slice(0, 6).map((p) => p.id));
+    const pool = available(w, club, squad, fx).filter((p) => (fx.purpose === 'youth' ? ageOf(p, w.season) <= 23 || !regulars.has(p.id) : !regulars.has(p.id)));
+    const picked = pool.length >= 11 ? pickXI(pool, l.squadRules, domesticFor(w, club, fx), pitch) : auto();
+    return { xi: picked, note: fx.purpose === 'youth' ? 'Friendly: young players first.' : 'Friendly: fringe players given a chance.', reasons: explainXI(picked, squad, pitch) };
+  }
   if (club.isUser && club.lineup?.length) {
+    const duty = playersOnDuty(w, fx.day);
     const xi = club.lineup.map((id) => w.players[id]).filter(Boolean);
-    const v = validateXI(xi, club.squad, l.squadRules, l.domesticCountries);
+    if (xi.some((p) => duty.has(p.id))) {
+      const picked = auto();
+      return { xi: picked, note: 'Saved XI includes players on international duty; the assistant picked the side.', reasons: explainXI(picked, squad, pitch) };
+    }
+    const v = validateXI(xi, club.squad, l.squadRules, domesticOf(club));
     if (v.ok) return { xi, note: null, reasons: [] };
     const picked = auto();
     return { xi: picked, note: `Saved XI was invalid (${v.errors[0]}); the assistant picked the side.`, reasons: explainXI(picked, squad, pitch) };
@@ -139,7 +165,8 @@ function addStats(target: StatLine, src: Partial<StatLine> & { hs?: number; bw?:
 function eloUpdate(w: WorldState, fx: Fixture, winnerId: string | null) {
   const a = w.clubs[fx.homeId];
   const b = w.clubs[fx.awayId];
-  const k = w.competitions[fx.competitionId].kind === 'wcc' ? 32 : 24;
+  const kind = w.competitions[fx.competitionId].kind;
+  const k = kind === 'wcc' ? 32 : kind === 'continental' ? 28 : kind === 'friendly' ? 6 : 24;
   const ea = 1 / (1 + Math.pow(10, (b.elo - a.elo) / 400));
   const sa = winnerId === null ? 0.5 : winnerId === a.id ? 1 : 0;
   const before = { a: a.elo, b: b.elo };
@@ -236,11 +263,13 @@ export function applyMatch(w: WorldState, fx: Fixture, s: MatchState) {
     if (d.wicket.kind === 'run out') l.runOuts = (l.runOuts ?? 0) + 1;
   }
 
+  const friendly = comp.kind === 'friendly';
   for (const [id, l] of lines) {
     const p = w.players[id];
     if (!p) continue;
     addStats((p.stats.seasons[statKey] ??= emptyStatLine()), l);
-    addStats(p.stats.career, l);
+    // Friendlies are recorded for the season but never count toward career records.
+    if (!friendly) addStats(p.stats.career, l);
   }
 
   // --- condition, morale, form
@@ -254,13 +283,14 @@ export function applyMatch(w: WorldState, fx: Fixture, s: MatchState) {
       if (!p) continue;
       if (xiIds.has(pid)) {
         const ld = load.get(pid)!;
-        applyMatchLoad(p, { ...ld, fielded: true });
-        updateForm(p, clamp(perf.get(pid) ?? 0, -4, 6));
+        const fw = friendly ? (fx.purpose === 'fitness' ? 0.75 : 1) : 1;
+        applyMatchLoad(p, { ballsFaced: ld.ballsFaced * fw, ballsBowled: ld.ballsBowled * fw, fielded: true });
+        updateForm(p, clamp(perf.get(pid) ?? 0, -4, 6) * (friendly ? 0.4 : 1) + (friendly && fx.purpose === 'fitness' ? 0.6 : friendly ? 0.3 : 0));
         p.benchStreak = 0;
         const pf = perf.get(pid) ?? 0;
-        updateMorale(w, p, club, 0.8 + (won ? 2.5 : lost ? -2.2 : 0) + clamp(pf, -2, 3));
-        rollInjury(w, p, club, ld.ballsBowled, rng);
-      } else {
+        updateMorale(w, p, club, friendly ? (fx.purpose === 'tactics' ? 2 : 1) : 0.8 + (won ? 2.5 : lost ? -2.2 : 0) + clamp(pf, -2, 3));
+        if (!friendly || rng.chance(0.5)) rollInjury(w, p, club, ld.ballsBowled, rng);
+      } else if (!friendly) {
         p.benchStreak += 1;
         updateMorale(w, p, club, (won ? 0.8 : lost ? -0.8 : 0) - (overall(p) > 72 ? 1.4 : 0.4));
       }
@@ -283,9 +313,17 @@ export function applyMatch(w: WorldState, fx: Fixture, s: MatchState) {
       });
     }
   }
-  matchdayIncome(w, fx.homeId, matchImportance(w, fx));
-  updateRivalry(w, fx, winnerId);
-  updateRecords(w, fx, summary);
+  if (fx.neutral && !friendly) {
+    // Neutral finals: the gate is shared.
+    matchdayIncome(w, fx.homeId, matchImportance(w, fx) * 0.5);
+    matchdayIncome(w, fx.awayId, matchImportance(w, fx) * 0.5);
+  } else if (!fx.neutral) matchdayIncome(w, fx.homeId, matchImportance(w, fx) * (friendly ? 0.4 : 1));
+  if (friendly) applyFriendlyEffects(w, fx, winnerId);
+  else {
+    updateRivalry(w, fx, winnerId);
+    updateRecords(w, fx, summary);
+    coefficientForMatch(w, fx);
+  }
   if (fx.involvesUser) trackUserTendencies(w, fx, s);
   if (fx.involvesUser) storiesAfterUserMatch(w, fx, s);
   if (fx.involvesUser) {

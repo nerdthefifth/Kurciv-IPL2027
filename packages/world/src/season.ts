@@ -1,6 +1,6 @@
 import type { BoardObjective, Club, Fixture, Player, SeasonAward, WorldState } from '@kurciv/domain';
 import { ageOf, isOverseas, marketValue, overall } from '@kurciv/domain';
-import { LEAGUES, WORLD, leagueById } from '@kurciv/config';
+import { CONTINENTAL, DIVISIONS, INTERNATIONAL, PRESEASON, WORLD, domesticOf, leagueById } from '@kurciv/config';
 import { generatePlayer } from '@kurciv/data-ingestion';
 import { pickXI, simulateMatch } from '@kurciv/ai';
 import type { MatchState } from '@kurciv/simulation';
@@ -10,7 +10,7 @@ import { developPlayer, recoverDay, retirementChance } from './condition';
 import { depthOf } from './create';
 import { recordTransaction, seasonStartFinances } from './finance';
 import { applyMatch, buildMatchSetup, matchSeed } from './matchday';
-import { addNews, clamp, clubsInLeague, nextId, round2, squadOf, worldRng } from './util';
+import { activeLeagues, addNews, clamp, clubsInLeague, isPyramid, nextId, round2, squadOf, worldRng } from './util';
 import { aiInjuryCover } from './transfers';
 import { allocateForWorld, createWCC, progressWCC, updateReputations } from './wcc';
 import { roleDemand } from './auction-live';
@@ -19,6 +19,12 @@ import { boardOf, boardSeasonReview, dismissalThreshold } from './clubworld/boar
 import { clubWorldSync } from './clubworld/sync';
 import { ensureCaptaincy } from './captaincy';
 import { pruneImpacts } from './impact';
+import { continentalComps, createContinentalCups, globalQualifiers, progressContinental, rollCoefficients } from './universe/continental';
+import { intlFixturesOnDay, playInternational, postseasonComplete, progressInternational, schedulePostseasonInternationals, snapshotRankings } from './universe/international';
+import { POSTSEASON_FROM } from './universe/lifecycle';
+import { promoteAndRelegate, snapshotMembership } from './universe/pyramid';
+
+const PYRAMID_RELEGATE = 3;
 
 export interface MatchRecord {
   fixtureId: string;
@@ -33,7 +39,7 @@ export function squadProblems(w: WorldState, club: Club): string[] {
   const out: string[] = [];
   if (squad.length < l.squadRules.minSquad) out.push(`Squad has ${squad.length} players; the ${l.shortName} minimum is ${l.squadRules.minSquad}. Sign free agents in Transfers.`);
   if (squad.length > l.squadRules.maxSquad) out.push(`Squad has ${squad.length} players; the maximum is ${l.squadRules.maxSquad}.`);
-  const os = squad.filter((p) => isOverseas(p, l.domesticCountries));
+  const os = squad.filter((p) => isOverseas(p, domesticOf(club)));
   if (os.length > l.squadRules.maxOverseas) out.push(`${os.length} overseas players registered; the maximum is ${l.squadRules.maxOverseas}.`);
   const byC: Record<string, number> = {};
   for (const p of os) byC[p.country] = (byC[p.country] ?? 0) + 1;
@@ -46,7 +52,7 @@ function boardObjectives(w: WorldState, club: Club): BoardObjective[] {
   const clubs = clubsInLeague(w, l.id);
   const strength = (c: Club) => {
     const sq = squadOf(w, c);
-    return sq.length >= 11 ? pickXI(sq, l.squadRules, l.domesticCountries).reduce((a, p) => a + overall(p), 0) : 0;
+    return sq.length >= 11 ? pickXI(sq, l.squadRules, domesticOf(c)).reduce((a, p) => a + overall(p), 0) : 0;
   };
   const rank = [...clubs].sort((a, b) => strength(b) - strength(a)).findIndex((c) => c.id === club.id) + 1;
   const objs: BoardObjective[] = [];
@@ -54,32 +60,47 @@ function boardObjectives(w: WorldState, club: Club): BoardObjective[] {
   const target = Math.min(clubs.length - 1, Math.max(1, rank + 1));
   objs.push({ id: nextId(w, 'obj'), description: `Finish in the top ${target} of the ${l.shortName} table (squad ranked #${rank} by the board).`, kind: 'league-position', target, importance: 'high', status: 'pending' });
   if (rank <= 4) objs.push({ id: nextId(w, 'obj'), description: 'Reach the playoffs.', kind: 'playoffs', target: 4, importance: 'medium', status: 'pending' });
-  if (w.leagues[l.id].wccSlots > 0 && rank <= w.leagues[l.id].wccSlots + 1) objs.push({ id: nextId(w, 'obj'), description: 'Qualify for the World Club Championship.', kind: 'wcc-qualify', target: 1, importance: 'medium', status: 'pending' });
+  if (isPyramid(w)) {
+    const tier = l.tier ?? 1;
+    if (tier > 1 && rank <= 5) objs.push({ id: nextId(w, 'obj'), description: `Win promotion from the ${l.shortName}.`, kind: 'league-position', target: 3, importance: 'medium', status: 'pending' });
+    if (tier < DIVISIONS.length && rank > clubs.length - 6) objs.push({ id: nextId(w, 'obj'), description: `Avoid relegation (finish above the bottom ${PYRAMID_RELEGATE}).`, kind: 'league-position', target: clubs.length - PYRAMID_RELEGATE, importance: 'high', status: 'pending' });
+    if (tier <= 2 && rank <= 6) objs.push({ id: nextId(w, 'obj'), description: 'Qualify for a continental cup.', kind: 'wcc-qualify', target: 1, importance: 'medium', status: 'pending' });
+  } else if (w.leagues[l.id].wccSlots > 0 && rank <= w.leagues[l.id].wccSlots + 1) objs.push({ id: nextId(w, 'obj'), description: 'Qualify for the World Club Championship.', kind: 'wcc-qualify', target: 1, importance: 'medium', status: 'pending' });
   objs.push({ id: nextId(w, 'obj'), description: 'Give at least one academy or under-23 player a debut.', kind: 'youth-debuts', target: 1, importance: 'low', status: 'pending' });
   objs.push({ id: nextId(w, 'obj'), description: 'Keep cash reserves above zero.', kind: 'finance', target: 0, importance: 'medium', status: 'pending' });
   return objs;
 }
 
 /** Called when auctions are done and the user's squad is valid. */
-export function startSeason(w: WorldState): string[] {
+export function startSeason(w: WorldState, records: MatchRecord[] = []): string[] {
   const problems = squadProblems(w, w.clubs[w.userClubId]);
   if (problems.length) return problems;
+  // Whatever is left of the preseason programme (friendlies and internationals) is played out;
+  // the caller stores the match records.
+  if (isPyramid(w)) {
+    let guard = 0;
+    while (w.day <= PRESEASON.lastDay + 2 && guard++ < 120) {
+      processDay(w, records, true);
+      endOfDay(w);
+    }
+    snapshotMembership(w);
+  }
   if (!Object.values(w.leagues).some((l) => l.wccSlots > 0)) allocateForWorld(w);
-  for (const l of LEAGUES) createLeagueCompetition(w, l.id);
+  for (const l of activeLeagues(w)) createLeagueCompetition(w, l.id);
   for (const c of Object.values(w.clubs)) {
     c.board.objectives = boardObjectives(w, c);
     // Initial Elo reflects the squad actually assembled at auction.
     if (w.season === WORLD.startSeason) {
       const l = leagueById(c.leagueId);
       const sq = squadOf(w, c);
-      const xi = sq.length >= 11 ? pickXI(sq, l.squadRules, l.domesticCountries).reduce((a, p) => a + overall(p), 0) / 11 : 55;
+      const xi = sq.length >= 11 ? pickXI(sq, l.squadRules, domesticOf(c)).reduce((a, p) => a + overall(p), 0) / 11 : 55;
       c.elo = Math.round(1500 + (xi - 68) * 18);
     }
   }
   seasonStartFinances(w);
   ensureCaptaincy(w);
   w.phase = 'season';
-  w.day = Math.min(...LEAGUES.map((l) => l.seasonStartDay)) - 1;
+  w.day = Math.min(...activeLeagues(w).map((l) => l.seasonStartDay)) - 1;
   addTimeline(w, 'season', `The ${w.season} season begins`, w.clubs[w.userClubId].board.objectives.map((o) => o.description).join(' '));
   addNews(w, { kind: 'board', importance: 2, headline: `${w.season} season under way`, body: w.clubs[w.userClubId].board.objectives.map((o) => o.description).join(' '), clubIds: [w.userClubId], playerIds: [], sourceRef: `season-${w.season}` });
   return [];
@@ -107,8 +128,10 @@ export interface AdvanceResult {
 /** Simulate every AI fixture due today, then rest/recover everyone. */
 function processDay(w: WorldState, records: MatchRecord[], autoUser: boolean): Fixture | null {
   resolveRefs(w);
+  // Internationals are always simulated (with the user's selections when they manage a nation).
+  for (const ifx of intlFixturesOnDay(w, w.day)) playInternational(w, ifx);
   for (const fx of fixturesOnDay(w, w.day)) {
-    if (fx.involvesUser && !autoUser) return fx;
+    if (fx.involvesUser && !autoUser && fx.mode !== 'sim') return fx;
     const setup = buildMatchSetup(w, fx);
     const state = simulateMatch(setup, matchSeed(w, fx));
     applyMatch(w, fx, state);
@@ -121,25 +144,42 @@ function endOfDay(w: WorldState) {
   for (const c of Object.values(w.clubs)) recoverDay(w, c);
   if (w.day % 3 === 0) aiInjuryCover(w);
   storiesDaily(w);
-  for (const l of LEAGUES) {
+  const leagues = activeLeagues(w);
+  for (const l of leagues) {
     const id = `${l.id}-${w.season}`;
     if (!w.competitions[id]) continue;
     maybeCreatePlayoffs(w, id);
     resolveRefs(w);
     if (maybeCompleteCompetition(w, id)) onLeagueComplete(w, id);
   }
-  if (w.phase === 'season' && LEAGUES.every((l) => w.competitions[`${l.id}-${w.season}`]?.stage === 'complete')) {
+  if (w.phase === 'season' && leagues.every((l) => w.competitions[`${l.id}-${w.season}`]?.stage === 'complete')) {
     w.phase = 'wcc';
-    const start = Math.max(...LEAGUES.map((l) => lastLeagueDay(w, `${l.id}-${w.season}`))) + WORLD.wcc.startDayAfterLeagues;
-    createWCC(w, start);
+    const last = Math.max(...leagues.map((l) => lastLeagueDay(w, `${l.id}-${w.season}`)));
+    // Pyramid: continental cups first, then the Global Club Championship. Leagues: straight to the WCC.
+    if (isPyramid(w)) createContinentalCups(w, last + CONTINENTAL.startDayAfterLeagues);
+    else createWCC(w, last + WORLD.wcc.startDayAfterLeagues);
   }
   if (w.phase === 'wcc') {
-    while (progressWCC(w)) resolveRefs(w);
+    if (isPyramid(w)) {
+      while (progressContinental(w)) resolveRefs(w);
+      const cups = continentalComps(w);
+      if (!w.competitions[`WCC-${w.season}`] && cups.every((c) => c.stage === 'complete')) {
+        const last = Math.max(w.day, ...Object.values(w.fixtures).filter((f) => cups.some((c) => c.id === f.competitionId)).map((f) => f.day));
+        createWCC(w, last + 3, globalQualifiers(w));
+      }
+    }
+    while (w.competitions[`WCC-${w.season}`] && progressWCC(w)) resolveRefs(w);
     if (w.competitions[`WCC-${w.season}`]?.stage === 'complete') {
-      w.phase = 'offseason';
       seasonAwards(w);
+      if (isPyramid(w)) {
+        w.phase = 'international';
+        const last = Math.max(w.day, ...Object.values(w.fixtures).filter((f) => f.competitionId === `WCC-${w.season}`).map((f) => f.day));
+        schedulePostseasonInternationals(w, Math.max(POSTSEASON_FROM, last + INTERNATIONAL.postseasonGap));
+      } else w.phase = 'offseason';
     }
   }
+  if (isPyramid(w)) while (progressInternational(w));
+  if (w.phase === 'international' && postseasonComplete(w, POSTSEASON_FROM)) w.phase = 'offseason';
   clubWorldSync(w);
   w.day++;
 }
@@ -153,7 +193,9 @@ function endOfDay(w: WorldState) {
 export function advance(w: WorldState, mode: 'day' | 'next' | 'season'): AdvanceResult {
   const records: MatchRecord[] = [];
   const messages: string[] = [];
-  if (w.phase !== 'season' && w.phase !== 'wcc') return { records, stoppedFor: 'phase', messages: ['Not in season.'] };
+  const preseason = w.phase === 'preseason' && isPyramid(w);
+  if (w.phase !== 'season' && w.phase !== 'wcc' && w.phase !== 'international' && !preseason) return { records, stoppedFor: 'phase', messages: ['Not in season.'] };
+  if (preseason && w.day > PRESEASON.lastDay) return { records, stoppedFor: 'phase', messages: ['The preseason programme is complete — start the season.'] };
   const autoUser = mode === 'season' || w.settings.autoPlayUserMatches;
   let guard = 0;
   const startPhase = w.phase;
@@ -162,7 +204,11 @@ export function advance(w: WorldState, mode: 'day' | 'next' | 'season'): Advance
     if (blocked) return { records, stoppedFor: 'user-match', fixtureId: blocked.id, messages };
     endOfDay(w);
     if ((w.phase as string) === 'offseason') return { records, stoppedFor: 'phase', messages: ['Season complete — review the awards, then begin the off-season.'] };
-    if (w.phase !== startPhase && mode !== 'season') return { records, stoppedFor: 'phase', messages: ['The World Club Championship is about to begin.'] };
+    if (preseason && w.day > PRESEASON.lastDay) return { records, stoppedFor: 'phase', messages: ['The preseason programme is complete — start the season.'] };
+    if (w.phase !== startPhase && mode !== 'season') {
+      const msg = w.phase === 'wcc' ? (isPyramid(w) ? 'The continental cups are about to begin.' : 'The World Club Championship is about to begin.') : w.phase === 'international' ? 'Club competitions are over: the international window is open.' : 'Season complete.';
+      return { records, stoppedFor: 'phase', messages: [msg] };
+    }
     if (mode === 'day') return { records, stoppedFor: 'limit', messages };
     if (mode === 'next') {
       const nf = nextUserFixture(w);
@@ -211,7 +257,7 @@ function onLeagueComplete(w: WorldState, compId: string) {
 // ------------------------------------------------------------------ awards & season end
 
 function seasonAwards(w: WorldState) {
-  for (const l of LEAGUES) {
+  for (const l of activeLeagues(w)) {
     const compId = `${l.id}-${w.season}`;
     const key = `${w.season}:${compId}`;
     const ps = Object.values(w.players).filter((p) => p.stats.seasons[key]);
@@ -250,7 +296,7 @@ function evaluateBoard(w: WorldState, club: Club) {
     let met = false;
     if (o.kind === 'league-position') met = table <= o.target || pos === 1;
     if (o.kind === 'playoffs') met = Object.values(w.fixtures).some((f) => f.competitionId === comp.id && f.stage !== 'League' && (f.homeId === club.id || f.awayId === club.id));
-    if (o.kind === 'wcc-qualify') met = !!wcc?.clubIds.includes(club.id);
+    if (o.kind === 'wcc-qualify') met = !!wcc?.clubIds.includes(club.id) || continentalComps(w).some((c) => c.clubIds.includes(club.id));
     if (o.kind === 'youth-debuts') met = squadOf(w, club).some((p) => ageOf(p, w.season) <= 23 && (p.stats.seasons[`${w.season}:${comp.id}`]?.matches ?? 0) > 0);
     if (o.kind === 'finance') met = club.cash >= 0;
     o.status = met ? 'met' : 'failed';
@@ -298,6 +344,11 @@ export function endSeason(w: WorldState) {
 
   updateReputations(w);
   for (const c of Object.values(w.clubs)) evaluateBoard(w, c);
+  const moves = isPyramid(w) ? promoteAndRelegate(w) : [];
+  if (isPyramid(w)) {
+    rollCoefficients(w);
+    snapshotRankings(w);
+  }
   boardSeasonReview(w);
   w.chronicles.push(buildChronicle(w));
   addTimeline(w, 'season', `${w.season} season complete`, w.chronicles[w.chronicles.length - 1].summary);
@@ -305,10 +356,13 @@ export function endSeason(w: WorldState) {
   // History snapshot
   w.history.push({
     season: w.season,
-    champions: [...LEAGUES.map((l) => `${l.id}-${w.season}`), `WCC-${w.season}`].map((id) => w.competitions[id]).filter((c) => c?.championId).map((c) => ({
+    champions: [...activeLeagues(w).map((l) => `${l.id}-${w.season}`), ...continentalComps(w).map((c) => c.id), `WCC-${w.season}`].map((id) => w.competitions[id]).filter((c) => c?.championId).map((c) => ({
       competitionId: c.id, name: c.name, clubId: c.championId!, clubName: w.clubs[c.championId!].name, runnerUpName: c.runnerUpId ? w.clubs[c.runnerUpId].name : '',
     })),
-    userClub: { clubId: user.id, competitionId: userComp.id, position: pos, played: row.played, won: row.won, result: userComp.championId === user.id ? 'Champions' : userComp.runnerUpId === user.id ? 'Runners-up' : `${pos}th in league` },
+    userClub: {
+      clubId: user.id, competitionId: userComp.id, position: pos, played: row.played, won: row.won,
+      result: (userComp.championId === user.id ? 'Champions' : userComp.runnerUpId === user.id ? 'Runners-up' : `${pos}th in league`) + (moves.find((m) => m.clubId === user.id)?.kind === 'promoted' ? ' · promoted' : moves.find((m) => m.clubId === user.id)?.kind === 'relegated' ? ' · relegated' : ''),
+    },
     awards: w.awards.filter((a) => a.season === w.season),
     reputations: Object.fromEntries(Object.entries(w.leagues).map(([k, v]) => [k, v.reputation])),
     wccSlots: Object.fromEntries(Object.entries(w.leagues).map(([k, v]) => [k, v.wccSlots])),
@@ -396,7 +450,7 @@ function youthIntake(w: WorldState, c: Club, rng: ReturnType<typeof worldRng>) {
   const l = leagueById(c.leagueId);
   for (let i = 0; i < n; i++) {
     if (c.academy.length >= WORLD.youth.academyMax) break;
-    const country = l.domesticCountries[0];
+    const country = domesticOf(c)[0] ?? c.country;
     const elite = rng.chance(WORLD.youth.eliteChance * (0.6 + c.facilities.youth * 0.15));
     const quality = depthOf(country) - 12 + c.facilities.youth * 1.2 + (elite ? 8 : 0);
     const p = generatePlayer(rng, { country, quality, age: rng.int(16, 19), season: w.season + 1, source: 'youth', idPrefix: `y${w.season}` }, w.counter++);
@@ -411,10 +465,15 @@ function youthIntake(w: WorldState, c: Club, rng: ReturnType<typeof worldRng>) {
 }
 
 function replenishPools(w: WorldState, rng: ReturnType<typeof worldRng>) {
-  for (const l of LEAGUES) {
-    const country = l.domesticCountries[0];
+  // Every club's home country keeps enough domestic depth (pyramid: per country; leagues: per league).
+  const targets: { country: (typeof w.clubs)[string]['country']; need: number }[] = [];
+  if (isPyramid(w)) {
+    const by: Record<string, number> = {};
+    for (const c of Object.values(w.clubs)) by[c.country] = (by[c.country] ?? 0) + 1;
+    for (const [country, n] of Object.entries(by)) targets.push({ country: country as (typeof targets)[number]['country'], need: n * 22 * 1.4 + 30 });
+  } else for (const l of activeLeagues(w)) targets.push({ country: l.domesticCountries[0], need: clubsInLeague(w, l.id).length * l.squadRules.maxSquad * 1.4 });
+  for (const { country, need } of targets) {
     const active = Object.values(w.players).filter((p) => p.country === country && !p.retired && !p.isYouth).length;
-    const need = clubsInLeague(w, l.id).length * l.squadRules.maxSquad * 1.4;
     for (let i = active; i < need; i++) {
       const p = generatePlayer(rng, { country, quality: depthOf(country), age: rng.int(19, 24), season: w.season + 1, idPrefix: `g${w.season}` }, w.counter++);
       w.players[p.id] = p;
@@ -443,7 +502,7 @@ export function validateRetentions(w: WorldState, club: Club, ids: string[]): st
   if (ids.length > l.squadRules.maxRetentions) return `At most ${l.squadRules.maxRetentions} players can be retained.`;
   for (const id of ids) if (!club.squad.includes(id)) return 'You can only retain players in your squad.';
   const ps = ids.map((id) => w.players[id]);
-  const os = ps.filter((p) => isOverseas(p, l.domesticCountries));
+  const os = ps.filter((p) => isOverseas(p, domesticOf(club)));
   if (os.length > l.squadRules.maxOverseas) return `Retentions cannot exceed the overseas limit (${l.squadRules.maxOverseas}).`;
   const byC: Record<string, number> = {};
   for (const p of os) byC[p.country] = (byC[p.country] ?? 0) + 1;
@@ -527,7 +586,7 @@ export function promoteYouth(w: WorldState, c: Club, id: string): string | null 
   if (!c.academy.includes(id)) return 'Player is not in your academy.';
   if (ageOf(p, w.season) < 16) return `${p.name} is too young to register (minimum age 16).`;
   if (c.squad.length >= l.squadRules.maxSquad) return 'Registered squad is full.';
-  if (!l.domesticCountries.includes(p.country)) return 'Academy graduates must be domestic players.';
+  if (!domesticOf(c).includes(p.country)) return 'Academy graduates must be domestic players.';
   c.academy = c.academy.filter((x) => x !== id);
   p.isYouth = false;
   p.clubId = c.id;

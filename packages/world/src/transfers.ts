@@ -1,7 +1,7 @@
 import type { Club, Player, WorldState } from '@kurciv/domain';
-import { ageOf, basePriceFor, canAfford, canRegister, overall } from '@kurciv/domain';
-import { leagueById } from '@kurciv/config';
-import { eligibleForLeague, fillSquadToMinimum, signPlayer } from './auction';
+import { ageOf, basePriceFor, canAfford, overall } from '@kurciv/domain';
+import { exportAllowed, leagueById } from '@kurciv/config';
+import { eligibleForLeague, fillSquadToMinimum, registerCheck, signPlayer } from './auction';
 import { addNews, nextId, round2, squadOf } from './util';
 
 /** Asking price for an unattached player: at least the league minimum, more for proven players. */
@@ -14,7 +14,7 @@ export function askingPrice(w: WorldState, p: Player, club: Club): number {
 export function freeAgentsFor(w: WorldState, club: Club): Player[] {
   const l = leagueById(club.leagueId);
   return Object.values(w.players)
-    .filter((p) => eligibleForLeague(p, l) && ageOf(p, w.season) >= 16)
+    .filter((p) => eligibleForLeague(p, l) && ageOf(p, w.season) >= 16 && exportAllowed(p.country, club))
     .sort((a, b) => overall(b) - overall(a));
 }
 
@@ -28,7 +28,7 @@ export function signFreeAgent(w: WorldState, playerId: string): string | null {
   if (w.phase === 'offseason') return 'The transfer window is closed until the new season’s auction completes.';
   if (!eligibleForLeague(p, l)) return p.clubId ? `${p.name} is under contract elsewhere.` : `${p.name} is not eligible to register in the ${l.shortName}.`;
   const squad = squadOf(w, club);
-  const reg = canRegister(squad, p, l.squadRules, l.domesticCountries);
+  const reg = registerCheck(w, club, p, l);
   if (!reg.ok) return reg.reason!;
   const price = askingPrice(w, p, club);
   if (price > club.purse + 1e-9) return `Asking price ₹${price.toFixed(2)} Cr exceeds your remaining purse ₹${club.purse.toFixed(2)} Cr.`;
@@ -68,7 +68,7 @@ export function aiInjuryCover(w: WorldState) {
     const fit = squadOf(w, c).filter((p) => !p.injury).length;
     if (fit >= 13 || c.squad.length >= l.squadRules.maxSquad) continue;
     const squad = squadOf(w, c);
-    const pick = freeAgentsFor(w, c).find((p) => canRegister(squad, p, l.squadRules, l.domesticCountries).ok && askingPrice(w, p, c) <= c.purse);
+    const pick = freeAgentsFor(w, c).find((p) => registerCheck(w, c, p, l).ok && askingPrice(w, p, c) <= c.purse);
     if (pick) signPlayer(w, c, pick, askingPrice(w, pick, c), 'replacement', l);
   }
 }

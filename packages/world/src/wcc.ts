@@ -1,10 +1,10 @@
 import type { Competition, Fixture, LeagueConfig, WorldState } from '@kurciv/domain';
-import { LEAGUES, VENUES, WORLD, leagueById } from '@kurciv/config';
+import { domesticOf, LEAGUES, REGIONS, VENUES, WORLD, leagueById, regionOf, stadiumCatalogue } from '@kurciv/config';
 import { pickXI } from '@kurciv/ai';
 import { overall } from '@kurciv/domain';
 import { emptyRow, finishingOrder, sortRows } from './competition';
 import { recordTransaction } from './finance';
-import { addNews, clamp, clubsInLeague, squadOf } from './util';
+import { activeLeagues, addNews, clamp, clubsInLeague, isPyramid, squadOf } from './util';
 import { addTimeline } from './story';
 
 // ------------------------------------------------------------------ allocation (pure)
@@ -81,7 +81,7 @@ export function historyScore(w: WorldState, leagueId: string): number {
 }
 
 export function allocateForWorld(w: WorldState): Record<string, number> {
-  const input = LEAGUES.map((l) => ({ id: l.id, reputation: w.leagues[l.id].reputation, clubs: clubsInLeague(w, l.id).length, history: historyScore(w, l.id) }));
+  const input = activeLeagues(w).map((l) => ({ id: l.id, reputation: w.leagues[l.id].reputation, clubs: clubsInLeague(w, l.id).length, history: historyScore(w, l.id) }));
   const slots = allocateSlots(input, WORLD.wcc);
   for (const [id, n] of Object.entries(slots)) w.leagues[id].wccSlots = n;
   return slots;
@@ -120,14 +120,24 @@ function hostCountry(w: WorldState): LeagueConfig {
   return order[(w.season - WORLD.startSeason) % order.length];
 }
 
+/** Pyramid: the Global Club Championship rotates between regions and is played at the region's biggest grounds. */
+function globalHostVenues(w: WorldState): string[] {
+  const region = REGIONS[(w.season - WORLD.startSeason) % REGIONS.length];
+  return stadiumCatalogue().filter((v) => regionOf(v.country) === region).sort((a, b) => (b.capacity ?? 0) - (a.capacity ?? 0) || a.id.localeCompare(b.id)).slice(0, 6).map((v) => v.id);
+}
+
 function venueFor(w: WorldState, i: number): string {
+  if (isPyramid(w)) {
+    const vs = globalHostVenues(w);
+    return vs[i % vs.length];
+  }
   const host = hostCountry(w);
   const vs = VENUES.filter((v) => v.country === host.country);
   return vs[i % vs.length].id;
 }
 
 export function qualificationPath(w: WorldState): { leagueId: string; slots: number; clubIds: string[] }[] {
-  return LEAGUES.map((l) => {
+  return activeLeagues(w).map((l) => {
     const comp = w.competitions[`${l.id}-${w.season}`];
     const slots = w.leagues[l.id].wccSlots;
     const ids = comp && comp.stage === 'complete' ? finishingOrder(w, comp.id).slice(0, slots) : [];
@@ -135,17 +145,20 @@ export function qualificationPath(w: WorldState): { leagueId: string; slots: num
   });
 }
 
-export function createWCC(w: WorldState, startDay: number): Competition {
+export function createWCC(w: WorldState, startDay: number, explicit?: { clubId: string; leagueId: string; route?: string }[]): Competition {
   const path = qualificationPath(w);
-  const qualifiers = path.flatMap((p) => p.clubIds.map((c) => ({ clubId: c, leagueId: p.leagueId })));
+  const qualifiers = explicit ?? path.flatMap((p) => p.clubIds.map((c) => ({ clubId: c, leagueId: p.leagueId })));
+  const global = isPyramid(w);
+  const title = global ? 'Global Club Championship' : 'Kurciv World Club Championship';
+  const hostLabel = global ? REGIONS[(w.season - WORLD.startSeason) % REGIONS.length] : hostCountry(w).country;
   const seeded = [...qualifiers].sort((a, b) => w.clubs[b.clubId].elo - w.clubs[a.clubId].elo || a.clubId.localeCompare(b.clubId));
   const plan = planFormat(seeded.length);
   const id = `WCC-${w.season}`;
   const comp: Competition = {
-    id, kind: 'wcc', leagueId: null, season: w.season, name: `Kurciv World Club Championship ${w.season}`, clubIds: seeded.map((q) => q.clubId),
+    id, kind: 'wcc', leagueId: null, season: w.season, name: `${title} ${w.season}`, clubIds: seeded.map((q) => q.clubId),
     standings: {}, stage: 'league', championId: null, runnerUpId: null,
     meta: {
-      plan, host: hostCountry(w).country, startDay, round: plan.prelimTeams ? 'prelim' : 'groups',
+      plan, host: hostLabel, startDay, round: plan.prelimTeams ? 'prelim' : 'groups',
       qualifiers: seeded.map((q, i) => ({ ...q, seed: i + 1 })),
       eloAtStart: Object.fromEntries(seeded.map((q) => [q.clubId, w.clubs[q.clubId].elo])),
       direct: seeded.slice(0, seeded.length - plan.prelimTeams).map((q) => q.clubId),
@@ -158,11 +171,11 @@ export function createWCC(w: WorldState, startDay: number): Competition {
   } else createGroups(w, comp, (comp.meta!.direct as string[]), startDay);
   for (const q of qualifiers) {
     if (w.clubs[q.clubId].isUser) {
-      addTimeline(w, 'qualification', 'Qualified for the World Club Championship', plan.description, [id]);
-      addNews(w, { kind: 'qualification', importance: 3, headline: `${w.clubs[q.clubId].name} qualify for the World Club Championship`, body: plan.description, clubIds: [q.clubId], playerIds: [], sourceRef: id });
+      addTimeline(w, 'qualification', `Qualified for the ${title}`, plan.description, [id]);
+      addNews(w, { kind: 'qualification', importance: 3, headline: `${w.clubs[q.clubId].name} qualify for the ${title}`, body: plan.description, clubIds: [q.clubId], playerIds: [], sourceRef: id });
     }
   }
-  addNews(w, { kind: 'qualification', importance: 2, headline: `${seeded.length} clubs set for the ${w.season} World Club Championship`, body: `${plan.description} Host nation: ${hostCountry(w).country}.`, clubIds: [], playerIds: [], sourceRef: id });
+  addNews(w, { kind: 'qualification', importance: 2, headline: `${seeded.length} clubs set for the ${w.season} ${title}`, body: `${plan.description} Host: ${hostLabel}.`, clubIds: [], playerIds: [], sourceRef: id });
   return comp;
 }
 
@@ -246,16 +259,17 @@ export function progressWCC(w: WorldState): boolean {
 function finishWCC(w: WorldState, comp: Competition) {
   const prize = WORLD.wcc.prize;
   const champ = w.clubs[comp.championId!];
-  recordTransaction(w, champ.id, 'prize', prize.champion, 'World Club Championship winners');
-  recordTransaction(w, comp.runnerUpId!, 'prize', prize.runnerUp, 'World Club Championship runners-up');
-  champ.trophies.push({ season: w.season, competitionId: comp.id, name: 'World Club Championship' });
+  const title = isPyramid(w) ? 'Global Club Championship' : 'World Club Championship';
+  recordTransaction(w, champ.id, 'prize', prize.champion, `${title} winners`);
+  recordTransaction(w, comp.runnerUpId!, 'prize', prize.runnerUp, `${title} runners-up`);
+  champ.trophies.push({ season: w.season, competitionId: comp.id, name: title });
   champ.brand = Math.min(100, champ.brand + 4);
   addNews(w, {
     kind: 'result', importance: 3, headline: `${champ.name} are world club champions`,
     body: `${champ.name} (${leagueById(champ.leagueId).shortName}) beat ${w.clubs[comp.runnerUpId!].name} in the final.`,
     clubIds: [champ.id, comp.runnerUpId!], playerIds: [], sourceRef: comp.id,
   });
-  w.hallOfFame.push({ id: `hof-${comp.id}`, season: w.season, kind: 'dynasty', title: `${w.season} World Club Champions`, detail: champ.name, refs: [comp.id] });
+  w.hallOfFame.push({ id: `hof-${comp.id}`, season: w.season, kind: 'dynasty', title: `${w.season} ${isPyramid(w) ? 'Global' : 'World'} Club Champions`, detail: champ.name, refs: [comp.id] });
 }
 
 // ------------------------------------------------------------------ reputation
@@ -288,16 +302,16 @@ export function updateReputations(w: WorldState): Record<string, { delta: number
   }
   // Squad-quality signal: average best-XI rating versus the global mean.
   const quality: Record<string, number> = {};
-  for (const l of LEAGUES) {
+  for (const l of activeLeagues(w)) {
     const xs = clubsInLeague(w, l.id).map((c) => {
       const sq = squadOf(w, c);
-      return sq.length >= 11 ? pickXI(sq, l.squadRules, l.domesticCountries).reduce((a, p) => a + overall(p), 0) / 11 : 50;
+      return sq.length >= 11 ? pickXI(sq, l.squadRules, domesticOf(c)).reduce((a, p) => a + overall(p), 0) / 11 : 50;
     });
     quality[l.id] = xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
   }
   const globalQ = Object.values(quality).reduce((a, b) => a + b, 0) / Object.values(quality).length;
   const out: Record<string, { delta: number; reason: string }> = {};
-  for (const l of LEAGUES) {
+  for (const l of activeLeagues(w)) {
     const st = w.leagues[l.id];
     const r = residual[l.id];
     const perf = r ? (r.sum / Math.max(1, r.weight)) * Math.sqrt(r.n) : 0;

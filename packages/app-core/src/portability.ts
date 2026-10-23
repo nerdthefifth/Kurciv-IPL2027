@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { WorldState } from '@kurciv/domain';
 import { isOverseas } from '@kurciv/domain';
-import { LEAGUES } from '@kurciv/config';
+import { ALL_LEAGUE_CONFIGS, domesticOf } from '@kurciv/config';
 import { primeClubWorld } from '@kurciv/world';
 import { GAME_VERSION, SAVE_SCHEMA_VERSION, type CareerMeta, type MatchRow } from './persistence';
 
@@ -29,7 +29,7 @@ const packageShape = z.object({
   exportedAt: z.string(),
   meta: z.object({ id: z.string(), name: z.string(), managerName: z.string(), clubId: z.string(), season: z.number().int() }).passthrough(),
   world: z.object({
-    careerId: z.string(), seed: z.string(), season: z.number().int(), day: z.number(), phase: z.enum(['retention', 'auction', 'preseason', 'season', 'wcc', 'offseason']),
+    careerId: z.string(), seed: z.string(), season: z.number().int(), day: z.number(), phase: z.enum(['retention', 'auction', 'preseason', 'season', 'wcc', 'international', 'offseason']),
     userClubId: z.string(), clubs: z.record(z.object({ id: z.string(), leagueId: z.string(), squad: z.array(z.string()) }).passthrough()),
     players: z.record(z.object({ id: z.string(), name: z.string(), country: z.string(), clubId: z.string().nullable() }).passthrough()),
     leagues: z.record(z.any()), fixtures: z.record(z.any()), competitions: z.record(z.any()), auctions: z.record(z.any()),
@@ -53,6 +53,18 @@ export function migrateWorld(world: WorldState, from: number): WorldState {
   }
   if (from < 3) w.matchImpacts ??= {};
   if (from < 4 || !w.clubWorld) primeClubWorld(w);
+  if (from < 5) {
+    // Careers started before the global pyramid keep the national leagues they were built on.
+    w.worldModel ??= 'leagues';
+    if (!w.news.some((n) => n.sourceRef === 'schema-5-notice')) {
+      w.news.unshift({
+        id: `n-schema5`, season: w.season, day: w.day, kind: 'board', importance: 2, sourceRef: 'schema-5-notice', clubIds: [], playerIds: [],
+        headline: 'This career keeps the original national leagues',
+        body: 'The global pyramid, continental cups, preseason friendlies and international cricket are available in new careers. This save keeps its leagues, squads and history unchanged.',
+      });
+    }
+  }
+  w.worldModel ??= 'leagues';
   w.schemaVersion = SAVE_SCHEMA_VERSION;
   return w;
 }
@@ -83,7 +95,7 @@ export function validatePackage(raw: unknown): ImportCheck {
   // Entity references and registration rules
   const seen = new Map<string, string>();
   for (const club of Object.values(w.clubs)) {
-    const league = LEAGUES.find((l) => l.id === club.leagueId);
+    const league = ALL_LEAGUE_CONFIGS().find((l) => l.id === club.leagueId);
     if (!league) {
       errors.push(`Club ${club.name} belongs to an unknown league (${club.leagueId}).`);
       continue;
@@ -100,7 +112,7 @@ export function validatePackage(raw: unknown): ImportCheck {
       if (seen.has(pid)) errors.push(`${p.name} is registered to both ${seen.get(pid)} and ${club.name}.`);
       seen.set(pid, club.name);
       if (p.clubId !== club.id) errors.push(`${p.name}'s club does not match ${club.name}'s squad list.`);
-      if (isOverseas(p, league.domesticCountries)) {
+      if (isOverseas(p, domesticOf(club))) {
         overseas++;
         byCountry[p.country] = (byCountry[p.country] ?? 0) + 1;
       }

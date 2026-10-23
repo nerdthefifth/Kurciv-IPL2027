@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { fieldForDelivery } from '@kurciv/simulation';
 import { Figure, P, blend, bowlAction, run, shotKind, shotPose, type Pose } from './figure';
-import { CREASE_Z, STUMPS_Z, buildGround, type Ground, type Quality } from './stadium';
+import { CREASE_Z, PRESETS, STUMPS_Z, buildGround, type Ground, type Quality } from './stadium';
 import { MODEL_CREDIT, loadCricketer, type CricketerAsset } from './rigged';
 export { MODEL_CREDIT };
 
@@ -77,19 +77,37 @@ export class Stage {
   lastEvent: any = null;
   private athlete: CricketerAsset | null = null;
   private disposed = false;
+  /** Post-processing chain (medium and above), loaded on demand. */
+  private composer: { render: () => void; setSize: (w: number, h: number) => void; dispose?: () => void } | null = null;
+  private trail: THREE.Line | null = null;
+  private trailPts: THREE.Vector3[] = [];
 
   constructor(private host: HTMLElement, state: any, quality: Quality) {
     this.state = state;
     this.quality = quality;
-    this.renderer = new THREE.WebGLRenderer({ antialias: quality !== 'low', powerPreference: quality === 'low' ? 'low-power' : 'default' });
-    this.pixelRatio = Math.min(window.devicePixelRatio, quality === 'high' ? 2 : quality === 'medium' ? 1.5 : 1);
+    const preset = PRESETS[quality] ?? PRESETS.medium;
+    this.renderer = new THREE.WebGLRenderer({ antialias: preset.antialias, powerPreference: quality === 'low' ? 'low-power' : 'high-performance' });
+    this.pixelRatio = Math.min(window.devicePixelRatio, preset.pixelRatio);
     this.renderer.setPixelRatio(this.pixelRatio);
-    this.renderer.shadowMap.enabled = quality === 'high';
+    this.renderer.shadowMap.enabled = preset.shadows;
+    this.renderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    // Filmic tone mapping keeps floodlit whites and sunlit grass in range.
+    this.renderer.toneMapping = quality === 'low' ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = state.setup.evening ? 1.05 : 1.15;
     host.appendChild(this.renderer.domElement);
     this.renderer.domElement.style.display = 'block';
-    this.ground = buildGround(this.scene, state.setup.venue, state.setup.home.colors, quality);
-    this.ball = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshBasicMaterial({ color: '#fdfdfd' }));
+    this.ground = buildGround(this.scene, state.setup.venue, state.setup.home.colors, quality, { evening: !!state.setup.evening, seed: state.setup.fixtureId });
+    // White ball for limited-overs cricket, red for Tests; the seam is painted into the texture.
+    this.ball = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 12), new THREE.MeshStandardMaterial({ map: ballTexture(state.setup.rules?.format === 'Test'), roughness: 0.38, metalness: 0 }));
+    this.ball.castShadow = preset.shadows;
+    if (preset.trail) {
+      this.trail = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: state.setup.rules?.format === 'Test' ? '#ff9a8a' : '#ffffff', transparent: true, opacity: 0.55 }));
+      this.trail.frustumCulled = false;
+      this.scene.add(this.trail);
+    }
+    if (preset.post !== 'none') void this.setupPost(preset.post);
+    this.ground.setWear(this.wearOf(state));
     this.ballShadow = new THREE.Mesh(new THREE.CircleGeometry(0.14, 10), new THREE.MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0.35 }));
     this.ballShadow.rotation.x = -Math.PI / 2;
     this.scene.add(this.ball, this.ballShadow, this.overlay);
@@ -101,7 +119,7 @@ export class Stage {
     void loadCricketer().then((g) => {
       if (!g || this.disposed) return;
       this.athlete = g;
-      for (const f of this.figures.values()) f.attach(g, this.quality === 'high');
+      for (const f of this.figures.values()) f.attach(g, this.quality === 'high' || this.quality === 'ultra');
       this.kick();
     });
   }
@@ -112,6 +130,7 @@ export class Stage {
     const w = this.host.clientWidth || 640;
     const h = this.host.clientHeight || 360;
     this.renderer.setSize(w, h, false);
+    this.composer?.setSize(w, h);
     this.renderer.domElement.style.width = '100%';
     this.renderer.domElement.style.height = '100%';
     this.camera.aspect = w / h;
@@ -128,7 +147,8 @@ export class Stage {
       const dt = Math.min(0.05, (now - this.last) / 1000);
       this.last = now;
       this.tick(dt);
-      this.renderer.render(this.scene, this.camera);
+      if (this.composer) this.composer.render();
+      else this.renderer.render(this.scene, this.camera);
       this.adapt(dt);
       if (this.clip || this.clips.length || this.settle-- > 0) this.raf = requestAnimationFrame(frame);
       else this.raf = 0;
@@ -172,7 +192,71 @@ export class Stage {
       for (const f of this.figures.values()) if (!f.root.userData.busy) f.setPose(f.kit === 'keeper' ? P.keeperCrouch() : f.root.userData.batter ? this.batterPose(f, P.stance()) : f.root.userData.bowler ? P.idle(s) : blend(P.idle(s), P.ready(), 0.5));
     }
     for (const f of this.figures.values()) f.syncBody();
+    this.updateTrail();
     this.updateCamera(dt);
+  }
+
+  /** Pitch wear rises through the match (innings and overs), so Test pitches crack by day five. */
+  private wearOf(state: any): number {
+    const inns = (state.innings ?? []).filter((i: any) => !i.superOver);
+    const base = state.setup.venue?.pitch?.wear ?? 0.2;
+    const balls = inns.reduce((a: number, i: any) => a + i.legalBalls, 0);
+    const total = (state.setup.rules?.overs ?? 20) * 6 * (state.setup.rules?.format === 'Test' ? 1 : 2);
+    return Math.min(1, base * 0.6 + (balls / Math.max(120, total)) * (0.4 + base));
+  }
+
+  private updateTrail() {
+    if (!this.trail) return;
+    const n = PRESETS[this.quality]?.trail ?? 0;
+    if (this.ball.visible) {
+      this.trailPts.push(this.ball.position.clone());
+      if (this.trailPts.length > n) this.trailPts.shift();
+    } else if (this.trailPts.length) this.trailPts.shift();
+    this.trail.visible = this.trailPts.length > 1;
+    if (this.trail.visible) this.trail.geometry.setFromPoints(this.trailPts);
+  }
+
+  /** Bloom for floodlights and a light colour grade and vignette, from three's post-processing passes. */
+  private async setupPost(kind: 'grade' | 'bloom') {
+    try {
+      const [{ EffectComposer }, { RenderPass }, { ShaderPass }, { OutputPass }, bloomMod] = await Promise.all([
+        import('three/examples/jsm/postprocessing/EffectComposer.js'),
+        import('three/examples/jsm/postprocessing/RenderPass.js'),
+        import('three/examples/jsm/postprocessing/ShaderPass.js'),
+        import('three/examples/jsm/postprocessing/OutputPass.js'),
+        kind === 'bloom' ? import('three/examples/jsm/postprocessing/UnrealBloomPass.js') : Promise.resolve(null),
+      ]);
+      if (this.disposed) return;
+      const composer = new EffectComposer(this.renderer);
+      composer.addPass(new RenderPass(this.scene, this.camera));
+      if (bloomMod) {
+        const w = this.host.clientWidth || 640;
+        const h = this.host.clientHeight || 360;
+        const evening = !!this.state.setup.evening;
+        composer.addPass(new bloomMod.UnrealBloomPass(new THREE.Vector2(w, h), evening ? 0.55 : 0.18, 0.5, evening ? 0.82 : 0.95));
+      }
+      composer.addPass(new OutputPass());
+      composer.addPass(new ShaderPass({
+        uniforms: { tDiffuse: { value: null }, uAmount: { value: 0.32 }, uWarm: { value: this.state.setup.evening ? 0.0 : 0.04 } },
+        vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: `uniform sampler2D tDiffuse; uniform float uAmount; uniform float uWarm; varying vec2 vUv;
+          void main() {
+            vec4 c = texture2D(tDiffuse, vUv);
+            c.rgb = mix(c.rgb, c.rgb * vec3(1.0 + uWarm, 1.0, 1.0 - uWarm), 1.0);
+            float d = distance(vUv, vec2(0.5));
+            c.rgb *= 1.0 - uAmount * smoothstep(0.45, 0.85, d);
+            gl_FragColor = c;
+          }`,
+      }));
+      const w = this.host.clientWidth || 640;
+      const h = this.host.clientHeight || 360;
+      composer.setPixelRatio(this.pixelRatio);
+      composer.setSize(w, h);
+      this.composer = composer;
+      this.kick();
+    } catch {
+      this.composer = null; // post-processing is optional; the plain renderer keeps working
+    }
   }
 
   private updateCamera(dt: number) {
@@ -228,8 +312,8 @@ export class Stage {
       f = undefined;
     }
     if (!f) {
-      f = new Figure(id, colors, kit, this.quality === 'high', team.shortName);
-      if (this.athlete) f.attach(this.athlete, this.quality === 'high');
+      f = new Figure(id, colors, kit, this.quality === 'high' || this.quality === 'ultra', team.shortName);
+      if (this.athlete) f.attach(this.athlete, this.quality === 'high' || this.quality === 'ultra');
       this.figures.set(id, f);
       this.scene.add(f.root);
     }
@@ -247,6 +331,7 @@ export class Stage {
   /** Puts the current batters, bowler and fielders where the engine has them for the next ball. */
   syncLineup(state: any) {
     this.state = state;
+    this.ground.setWear(this.wearOf(state));
     const inn = state.innings[state.innings.length - 1];
     for (const f of this.figures.values()) f.root.visible = false;
     if (!inn) return;
@@ -767,6 +852,7 @@ export class Stage {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.raf = 0;
+    this.composer?.dispose?.();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     // Figure geometries and materials are shared module-wide and reused by the next match view.
@@ -774,6 +860,34 @@ export class Stage {
       if (o.isMesh && !o.userData.shared) o.geometry?.dispose?.();
     });
   }
+}
+
+/** Leather ball with a stitched seam, painted on a canvas (red for Tests, white otherwise). */
+function ballTexture(red: boolean): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 64;
+  const g = c.getContext('2d')!;
+  g.fillStyle = red ? '#9b1b1b' : '#f4f1ea';
+  g.fillRect(0, 0, 128, 64);
+  for (let i = 0; i < 300; i++) {
+    g.fillStyle = red ? `rgba(60,0,0,${Math.random() * 0.15})` : `rgba(120,110,90,${Math.random() * 0.08})`;
+    g.fillRect(Math.random() * 128, Math.random() * 64, 2, 2);
+  }
+  g.strokeStyle = red ? '#f1e6c8' : '#c43b3b';
+  g.lineWidth = 2;
+  g.beginPath();
+  for (let x = 0; x <= 128; x += 2) g.lineTo(x, 32 + Math.sin((x / 128) * Math.PI * 2) * 10);
+  g.stroke();
+  g.setLineDash([2, 3]);
+  for (const off of [-3, 3]) {
+    g.beginPath();
+    for (let x = 0; x <= 128; x += 2) g.lineTo(x, 32 + off + Math.sin((x / 128) * Math.PI * 2) * 10);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 export function webglAvailable(): boolean {

@@ -27,10 +27,11 @@ export function NewCareerPage() {
   const m = useMeta();
   const nav = useNavigate();
   const [step, setStep] = useState(0);
+  const [worldModel, setWorldModel] = useState<'pyramid' | 'leagues'>('pyramid');
   const [leagueId, setLeagueId] = useState('IPL');
   const [clubId, setClubId] = useState<string | null>(null);
   const [custom, setCustom] = useState(false);
-  const [cc, setCc] = useState({ name: '', shortName: '', city: '', c1: '#C5F36B', c2: '#101210', venueId: '' });
+  const [cc, setCc] = useState({ name: '', shortName: '', city: '', c1: '#7A1F35', c2: '#F5EFE3', venueId: '' });
   const [manager, setManager] = useState('');
   const [difficulty, setDifficulty] = useState('professional');
   const [philosophy, setPhilosophy] = useState('balanced');
@@ -39,7 +40,19 @@ export function NewCareerPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const league = m.leagues.find((l: any) => l.id === leagueId);
+  const pyramid = worldModel === 'pyramid';
+  const divName = (id: string | null | undefined) => m.divisions?.find((d: any) => d.id === id)?.shortName ?? '';
+  const startDiv = (id: string): string | null => (pyramid ? m.pyramid?.seeding?.[id] ?? null : null);
+  // In the pyramid, fictional clubs appear as their own group alongside the home leagues.
+  const fictional = {
+    id: 'FIC', name: 'Fictional clubs', shortName: 'Fictional', countryName: 'Worldwide', country: 'IRE', reputation: 45, purse: m.divisions?.[4]?.purse ?? 18,
+    squadRules: m.divisions?.[4]?.squadRules ?? m.leagues[0].squadRules,
+    clubs: (m.pyramid?.fictionalClubs ?? []).map((c: any) => ({ ...c, personality: 'value-hunter', brand: 40, venue: m.venues.find((v: any) => v.id === c.venueId)?.name })),
+  };
+  const groups = pyramid ? [...m.leagues, fictional] : m.leagues;
+  const league = groups.find((l: any) => l.id === leagueId);
+  const clubDivision = clubId ? startDiv(clubId) : null;
+  const ruleSource = pyramid ? m.divisions?.find((d: any) => d.id === (custom ? 'GD5' : clubDivision)) ?? null : null;
   const club = league?.clubs.find((c: any) => c.id === clubId);
   const customOk = cc.name.trim().length >= 3 && /^[A-Za-z]{2,4}$/.test(cc.shortName) && cc.city.trim().length >= 2;
   const canNext = [!!league, custom ? customOk : !!clubId, manager.trim().length >= 2, true][step];
@@ -48,8 +61,8 @@ export function NewCareerPage() {
     setBusy(true);
     setError(null);
     try {
-      const body: any = { managerName: manager.trim(), difficulty, philosophy, seed: seed.trim() || undefined };
-      if (custom) body.customClub = { name: cc.name.trim(), shortName: cc.shortName.toUpperCase(), city: cc.city.trim(), leagueId, colors: [cc.c1, cc.c2], venueId: cc.venueId || undefined };
+      const body: any = { managerName: manager.trim(), difficulty, philosophy, seed: seed.trim() || undefined, worldModel };
+      if (custom) body.customClub = { name: cc.name.trim(), shortName: cc.shortName.toUpperCase(), city: cc.city.trim(), leagueId: leagueId === 'FIC' ? 'GD5' : leagueId, colors: [cc.c1, cc.c2], venueId: cc.venueId || undefined };
       else body.clubId = clubId;
       const r = await api<{ id: string }>('/careers', { body });
       nav(`/c/${r.id}`);
@@ -70,16 +83,31 @@ export function NewCareerPage() {
         <div className="my-6"><Steps steps={STEPS} current={step} /></div>
 
         {step === 0 && (
+          <div className="mb-5 grid gap-3 md:grid-cols-2">
+            {([
+              { id: 'pyramid', title: 'Global pyramid', text: `${m.divisions?.length ?? 5} divisions of ${m.pyramid?.clubsPerDivision ?? 18} clubs from every region, promotion and relegation, continental cups, preseason friendlies and international cricket (Test, ODI and T20).`, badge: 'Recommended' },
+              { id: 'leagues', title: 'Classic national leagues', text: `The original ${m.leagues.length} franchise leagues and the World Club Championship. No pyramid, cups or international cricket.`, badge: null },
+            ] as const).map((o) => (
+              <button key={o.id} onClick={() => { setWorldModel(o.id); setClubId(null); if (o.id === 'leagues' && leagueId === 'FIC') setLeagueId('IPL'); }} aria-pressed={worldModel === o.id}
+                className={`card p-4 text-left transition-colors ${worldModel === o.id ? 'border-lime ring-1 ring-lime/40' : 'hover:border-obsidian-500'}`}>
+                <div className="flex items-center justify-between"><span className="font-semibold">{o.title}</span>{o.badge && <Badge tone="lime">{o.badge}</Badge>}</div>
+                <p className="mt-1 text-sm text-ink-muted">{o.text}</p>
+              </button>
+            ))}
+          </div>
+        )}
+        {step === 0 && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {m.leagues.map((l: any) => (
+            {pyramid && <p className="text-sm text-ink-muted sm:col-span-2 lg:col-span-3">Pick a home league to see its clubs. In the pyramid, clubs are seeded into divisions by league standing and brand; each club shows where it starts.</p>}
+            {groups.map((l: any) => (
               <button key={l.id} onClick={() => { setLeagueId(l.id); setClubId(null); }} aria-pressed={leagueId === l.id}
                 className={`card flex flex-col gap-2 p-4 text-left transition-colors ${leagueId === l.id ? 'border-lime ring-1 ring-lime/40' : 'hover:border-obsidian-500'}`}>
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">{l.shortName}</span>
-                  <Badge tone={l.reputation >= 85 ? 'lime' : 'muted'}>Rep {l.reputation}</Badge>
+                  <Badge tone={l.reputation >= 85 ? 'lime' : 'muted'}>{pyramid ? `${l.clubs.length} clubs` : `Rep ${l.reputation}`}</Badge>
                 </div>
                 <span className="text-sm text-ink-muted">{l.name}</span>
-                <span className="text-xs text-ink-faint">{l.countryName} · {l.clubs.length} clubs · purse {cr(l.purse)}</span>
+                <span className="text-xs text-ink-faint">{pyramid ? `${l.countryName} · starts in ${[...new Set(l.clubs.map((c: any) => divName(startDiv(c.id))))].join(', ')}` : `${l.countryName} · ${l.clubs.length} clubs · purse ${cr(l.purse)}`}</span>
                 <span className="mt-1 flex -space-x-1.5">{l.clubs.slice(0, 8).map((c: any) => <ClubCrest key={c.id} club={{ ...c, leagueId: l.id }} size={22} />)}</span>
               </button>
             ))}
@@ -90,7 +118,9 @@ export function NewCareerPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-ink-muted">
-                {league.name}: squads {league.squadRules.minSquad}–{league.squadRules.maxSquad}, max {league.squadRules.maxOverseas} overseas ({league.squadRules.maxPerOverseasCountry} per country), {league.squadRules.maxRetentions} retentions a season.
+                {pyramid
+                  ? 'Pyramid squads: 16–22 players, up to 6 overseas (from outside the club’s own country), 6 retentions a season. The purse depends on the division.'
+                  : `${league.name}: squads ${league.squadRules.minSquad}–${league.squadRules.maxSquad}, max ${league.squadRules.maxOverseas} overseas (${league.squadRules.maxPerOverseasCountry} per country), ${league.squadRules.maxRetentions} retentions a season.`}
               </p>
               <button className="btn-ghost" onClick={() => { setCustom(!custom); setClubId(null); }}>{custom ? 'Choose an existing club' : 'Create an expansion club'}</button>
             </div>
@@ -105,6 +135,7 @@ export function NewCareerPage() {
                       <span className="block truncate font-semibold">{c.name}</span>
                       <span className="block text-xs text-ink-muted">{c.city} · {c.venue}</span>
                       <span className="block text-xs text-ink-faint">Brand {c.brand} · {c.personality.replace('-', ' ')} owners</span>
+                      {pyramid && startDiv(c.id) && <span className="mt-1 inline-block"><Badge tone="info">Starts in {divName(startDiv(c.id))}</Badge></span>}
                     </span>
                   </button>
                 ))}
@@ -118,7 +149,7 @@ export function NewCareerPage() {
                   <span className="label">Home ground</span>
                   <select className="input mt-1 w-full" value={cc.venueId} onChange={(e) => setCc({ ...cc, venueId: e.target.value })}>
                     <option value="">Default for {league.countryName}</option>
-                    {m.venues.filter((v: any) => v.country === league.country).map((v: any) => <option key={v.id} value={v.id}>{v.name}, {v.city}</option>)}
+                    {m.venues.filter((v: any) => (pyramid && league.id === 'FIC' ? v.fictional : v.country === league.country)).map((v: any) => <option key={v.id} value={v.id}>{v.name}, {v.city}</option>)}
                   </select>
                 </label>
                 <div className="flex items-center gap-5">
@@ -126,7 +157,7 @@ export function NewCareerPage() {
                   <label className="label flex items-center gap-2">Secondary <input type="color" value={cc.c2} onChange={(e) => setCc({ ...cc, c2: e.target.value })} /></label>
                   {shownClub && <ClubCrest club={shownClub} size={44} />}
                 </div>
-                <p className="text-xs text-ink-muted sm:col-span-2">An expansion franchise joins the {league.shortName} with a modest brand and builds its squad in the auction like everyone else. Name and code must be unique in the league.</p>
+                <p className="text-xs text-ink-muted sm:col-span-2">{pyramid ? 'An expansion club starts in League Three (the fifth division) with a modest brand; its country is the home ground’s country. Name and code must be unique.' : `An expansion franchise joins the ${league.shortName} with a modest brand and builds its squad in the auction like everyone else. Name and code must be unique in the league.`}</p>
               </div>
             )}
           </div>
@@ -167,7 +198,7 @@ export function NewCareerPage() {
               <div className="flex items-center gap-4">
                 <ClubCrest club={shownClub} size={72} />
                 <div>
-                  <div className="kicker">{league.name}</div>
+                  <div className="kicker">{pyramid ? `${divName(custom ? 'GD5' : clubDivision)} · global pyramid` : league.name}</div>
                   <div className="headline text-2xl">{shownClub.name}</div>
                   <div className="text-sm text-ink-muted">Managed by {manager.trim()}</div>
                 </div>
@@ -175,17 +206,27 @@ export function NewCareerPage() {
               <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
                 <div><dt className="label">Difficulty</dt><dd>{DIFFICULTY.find((d) => d.id === difficulty)!.label}</dd></div>
                 <div><dt className="label">Philosophy</dt><dd>{PHILOSOPHY.find((p) => p.id === philosophy)!.label}</dd></div>
-                <div><dt className="label">Auction purse</dt><dd className="num">{cr(league.purse)}</dd></div>
-                <div><dt className="label">Squad rules</dt><dd>{league.squadRules.maxSquad} max · {league.squadRules.maxOverseas} overseas</dd></div>
+                <div><dt className="label">Auction purse</dt><dd className="num">{cr(ruleSource?.purse ?? league.purse)}</dd></div>
+                <div><dt className="label">Squad rules</dt><dd>{(ruleSource?.squadRules ?? league.squadRules).maxSquad} max · {(ruleSource?.squadRules ?? league.squadRules).maxOverseas} overseas</dd></div>
               </dl>
             </div>
             <div className="space-y-4">
               <div className="panel p-4 text-sm text-ink-muted">
                 <div className="label mb-1 text-ink">What happens next</div>
                 <ol className="list-decimal space-y-1 pl-5">
-                  <li>The world is built: {m.leagues.length} leagues, their clubs and players.</li>
-                  <li>Higher-tier leagues run their auctions first.</li>
-                  <li>You enter the {league.shortName} auction room with a full purse.</li>
+                  {pyramid ? (
+                    <>
+                      <li>The world is built: {m.divisions?.length ?? 5} divisions, 90 clubs, about 13,000 players (over 3,000 real and 10,000 fictional) and 24 national teams.</li>
+                      <li>Higher divisions run their auctions first.</li>
+                      <li>You enter your division’s auction room, then arrange preseason friendlies.</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>The world is built: {m.leagues.length} leagues, their clubs and players.</li>
+                      <li>Higher-tier leagues run their auctions first.</li>
+                      <li>You enter the {league.shortName} auction room with a full purse.</li>
+                    </>
+                  )}
                 </ol>
               </div>
               <div className="panel p-4">

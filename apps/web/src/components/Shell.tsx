@@ -26,9 +26,23 @@ const NAV: { section: string; items: NavItem[] }[] = [
     { to: 'match', label: 'Match Centre', icon: 'match' },
     { to: 'fixtures', label: 'Fixtures', icon: 'calendar' },
     { to: 'table', label: 'League', icon: 'league' },
+    { to: 'preseason', label: 'Preseason', icon: 'flag' },
+  ] },
+  { section: 'World', items: [
+    { to: 'universe', label: 'World Explorer', icon: 'world' },
+    { to: 'pyramid', label: 'Pyramid', icon: 'league' },
+    { to: 'continental', label: 'Continental Cups', icon: 'trophy' },
+    { to: 'global', label: 'Global Championship', icon: 'star' },
+    { to: 'international', label: 'International', icon: 'flag' },
+    { to: 'national-team', label: 'National Team', icon: 'shield' },
+    { to: 'clubs', label: 'Club Directory', icon: 'squad' },
+    { to: 'players', label: 'Player Directory', icon: 'scout' },
+    { to: 'stadiums', label: 'Stadiums', icon: 'home' },
+    { to: 'calendar', label: 'Global Calendar', icon: 'calendar' },
   ] },
   { section: 'Market', items: [
     { to: 'auction', label: 'Auction House', icon: 'gavel' },
+    { to: 'auction-prep', label: 'Auction Prep', icon: 'book' },
     { to: 'transfers', label: 'Transfers', icon: 'transfer' },
     { to: 'scouting', label: 'Scouting', icon: 'scout' },
   ] },
@@ -39,7 +53,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
     { to: 'finances', label: 'Finances', icon: 'finance' },
   ] },
   { section: 'Legacy', items: [
-    { to: 'world', label: 'World Cricket', icon: 'world' },
+    { to: 'world', label: 'League Reputation', icon: 'world' },
     { to: 'database', label: 'Player Database', icon: 'squad' },
     { to: 'history', label: 'History', icon: 'history' },
     { to: 'settings', label: 'Save & Settings', icon: 'settings' },
@@ -296,9 +310,9 @@ export function ContinueButton({ big = false }: { big?: boolean }) {
     else if (r.phase === 'auction' || r.phase === 'retention') nav(`/c/${id}/auction`);
     else if (r.phase === 'offseason') nav(`/c/${id}/history`);
   };
-  const label = o.phase === 'auction' ? 'Auction room' : o.phase === 'preseason' ? 'Start season' : o.phase === 'offseason' ? 'Begin off-season'
+  const label = o.phase === 'auction' ? 'Auction room' : o.phase === 'preseason' ? (o.pendingFriendlies ? 'Next friendly' : 'Start season') : o.phase === 'offseason' ? 'Begin off-season'
     : o.phase === 'retention' ? 'Commit retentions' : today ? 'Play match' : 'Continue';
-  const inSeason = (o.phase === 'season' || o.phase === 'wcc') && !today;
+  const inSeason = (o.phase === 'season' || o.phase === 'wcc' || o.phase === 'international') && !today;
   return (
     <div className="relative flex shrink-0">
       <button className={`btn-primary ${big ? 'px-6 py-3 text-base' : ''} ${inSeason ? 'rounded-r-none' : ''}`} disabled={busy} onClick={() => request('next')}>

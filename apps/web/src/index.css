@@ -3,53 +3,54 @@
 @tailwind utilities;
 
 /* ------------------------------------------------------------------ design tokens */
+/* Light (default): cream paper and burgundy. Dark: "Smoked Wine". Every screen themes from these. */
 :root,
-[data-theme='dark'] {
-  color-scheme: dark;
-  --bg: 16 18 16; /* obsidian #101210 */
-  --surface: 25 29 25; /* elevated graphite #191D19 */
-  --surface-2: 30 34 30;
-  --surface-3: 35 39 34; /* warm charcoal #232722 */
-  --line: 46 51 45;
-  --line-strong: 62 68 60;
-  --line-stronger: 84 91 81;
-  --text: 241 240 232; /* soft ivory #F1F0E8 */
-  --text-muted: 166 176 159; /* muted sage #A6B09F */
-  --text-faint: 116 124 111;
-  --accent: 197 243 107; /* kurciv lime #C5F36B */
-  --accent-hover: 210 247 140;
-  --accent-press: 172 220 86;
-  --accent-deep: 38 58 40; /* deep forest #263A28 */
-  --forest: 38 58 40;
-  --on-accent: 16 18 16;
-  --danger: 217 121 114; /* #D97972 */
-  --warn: 217 174 105; /* #D9AE69 */
-  --info: 143 180 196;
-  --glow: 197 243 107;
-}
-
 [data-theme='light'] {
   color-scheme: light;
-  --bg: 242 238 227; /* parchment */
-  --surface: 250 248 241;
-  --surface-2: 246 243 234;
-  --surface-3: 236 232 220;
-  --line: 222 216 201;
-  --line-strong: 204 197 180;
-  --line-stronger: 176 169 152;
-  --text: 38 41 36;
-  --text-muted: 92 99 88;
-  --text-faint: 131 137 125;
-  --accent: 78 112 24; /* deeper green for contrast on parchment */
-  --accent-hover: 92 128 30;
-  --accent-press: 64 94 18;
-  --accent-deep: 214 228 190;
-  --forest: 38 58 40;
-  --on-accent: 250 248 241;
-  --danger: 176 72 64;
-  --warn: 150 104 36;
-  --info: 58 104 128;
-  --glow: 78 112 24;
+  --bg: 245 239 227; /* cream #F5EFE3 */
+  --surface: 251 247 238; /* paper #FBF7EE */
+  --surface-2: 247 241 229;
+  --surface-3: 239 230 214; /* parchment #EFE6D6 */
+  --line: 227 216 196;
+  --line-strong: 207 193 168;
+  --line-stronger: 179 163 134;
+  --text: 43 26 29; /* claret ink #2B1A1D */
+  --text-muted: 110 90 85;
+  --text-faint: 150 132 125;
+  --accent: 122 31 53; /* burgundy #7A1F35 */
+  --accent-hover: 142 42 67;
+  --accent-press: 101 24 41;
+  --accent-deep: 241 220 224; /* blush #F1DCE0 */
+  --forest: 122 31 53;
+  --on-accent: 251 247 238;
+  --danger: 179 64 47;
+  --warn: 168 116 42;
+  --info: 63 110 134;
+  --glow: 122 31 53;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: 23 15 18; /* smoked wine #170F12 */
+  --surface: 33 22 26; /* #21161A */
+  --surface-2: 39 26 31;
+  --surface-3: 46 32 37; /* #2E2025 */
+  --line: 61 43 49;
+  --line-strong: 82 58 65;
+  --line-stronger: 108 80 88;
+  --text: 243 233 226; /* warm cream #F3E9E2 */
+  --text-muted: 187 167 159;
+  --text-faint: 138 118 111;
+  --accent: 224 138 160; /* rosé #E08AA0 */
+  --accent-hover: 234 160 179;
+  --accent-press: 201 113 138;
+  --accent-deep: 62 26 38; /* deep claret #3E1A26 */
+  --forest: 92 30 50;
+  --on-accent: 26 14 18;
+  --danger: 224 123 110;
+  --warn: 221 176 112;
+  --info: 143 180 196;
+  --glow: 224 138 160;
 }
 
 html,
@@ -69,8 +70,8 @@ body {
 .grain {
   background-color: rgb(var(--bg));
   background-image:
-    radial-gradient(1200px 600px at 85% -10%, rgb(var(--forest) / 0.35), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgb(var(--forest) / 0.22), transparent 60%),
+    radial-gradient(1200px 600px at 85% -10%, rgb(var(--forest) / 0.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgb(var(--forest) / 0.07), transparent 60%),
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
 }
 
@@ -189,26 +190,26 @@ body {
 /* ------------------------------------------------------------------ print (match reports) */
 @media print {
   :root, [data-theme='dark'], [data-theme='light'] {
-    --bg: 242 238 227; /* parchment */
-    --surface: 250 248 241;
-    --surface-2: 246 243 234;
-    --surface-3: 236 232 220;
-    --line: 222 216 201;
-    --line-strong: 204 197 180;
-    --line-stronger: 176 169 152;
-    --text: 38 41 36;
-    --text-muted: 92 99 88;
-    --text-faint: 131 137 125;
-    --accent: 78 112 24; /* deeper green for contrast on parchment */
-    --accent-hover: 92 128 30;
-    --accent-press: 64 94 18;
-    --accent-deep: 214 228 190;
-    --forest: 38 58 40;
-    --on-accent: 250 248 241;
-    --danger: 176 72 64;
-    --warn: 150 104 36;
-    --info: 58 104 128;
-    --glow: 78 112 24;
+    --bg: 245 239 227;
+    --surface: 251 247 238;
+    --surface-2: 247 241 229;
+    --surface-3: 239 230 214;
+    --line: 227 216 196;
+    --line-strong: 207 193 168;
+    --line-stronger: 179 163 134;
+    --text: 43 26 29;
+    --text-muted: 110 90 85;
+    --text-faint: 150 132 125;
+    --accent: 122 31 53;
+    --accent-hover: 142 42 67;
+    --accent-press: 101 24 41;
+    --accent-deep: 241 220 224;
+    --forest: 122 31 53;
+    --on-accent: 251 247 238;
+    --danger: 179 64 47;
+    --warn: 168 116 42;
+    --info: 63 110 134;
+    --glow: 122 31 53;
     color-scheme: light;
   }
   body { background: #fff !important; }

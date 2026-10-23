@@ -1,9 +1,9 @@
-import type { AuctionLot, AuctionState, Club, LeagueConfig, LiveAuction, Player, WorldState } from '@kurciv/domain';
+import type { AuctionLot, AuctionState, Club, LeagueConfig, LiveAuction, Player, RuleCheck, WorldState } from '@kurciv/domain';
 import { ageOf, basePriceFor, bowlingKind, canAfford, canRegister, isOverseas, marketValue, overall } from '@kurciv/domain';
-import { EXPORT_RESTRICTIONS, LEAGUES, leagueById } from '@kurciv/config';
+import { COUNTRY_NAMES, EXPORT_RESTRICTIONS, domesticOf, exportAllowed, leagueById } from '@kurciv/config';
 import { hash01 } from '@kurciv/simulation';
 import { pickXI } from '@kurciv/ai';
-import { addNews, clubsInLeague, formatCr, nextId, round2, squadOf } from './util';
+import { activeLeagues, addNews, clubsInLeague, formatCr, nextId, round2, squadOf } from './util';
 import { recordTransaction } from './finance';
 import { addTimeline } from './story';
 
@@ -44,9 +44,16 @@ export function nextBid(l: LeagueConfig, lot: AuctionLot): number {
 }
 
 export function eligibleForLeague(p: Player, l: LeagueConfig): boolean {
+  // In the pyramid, export restrictions apply club by club (see registerCheck).
   const restricted = EXPORT_RESTRICTIONS[p.country];
-  if (restricted && !restricted.includes(l.id)) return false;
+  if (restricted && l.kind !== 'division' && !restricted.includes(l.id)) return false;
   return !p.retired && !p.isYouth && p.clubId === null;
+}
+
+/** Can `club` register `p`? Squad rules relative to the club's own country, plus export restrictions. */
+export function registerCheck(w: WorldState, club: Club, p: Player, l: LeagueConfig = leagueById(club.leagueId)): RuleCheck {
+  if (!exportAllowed(p.country, club)) return { ok: false, code: 'EXPORT', reason: `${p.name} may only join clubs from ${COUNTRY_NAMES[p.country]}.` };
+  return canRegister(squadOf(w, club), p, l.squadRules, domesticOf(club));
 }
 
 const REPLACEMENT_LEVEL = 64;
@@ -65,10 +72,10 @@ export function roleTargets(l: LeagueConfig): Record<Category, number> {
   return { WK: 2, BAT: Math.round(S * 0.26), AR: Math.round(S * 0.2), PACE: Math.round(S * 0.22), SPIN: Math.round(S * 0.13) };
 }
 
-function xiStrength(players: Player[], l: LeagueConfig, replacement = REPLACEMENT_LEVEL): number {
+function xiStrength(players: Player[], l: LeagueConfig, club: Club, replacement = REPLACEMENT_LEVEL): number {
   // Empty slots count at replacement level: what a club can still expect to buy later.
   if (players.length < 11) return players.reduce((a, p) => a + overall(p), 0) + (11 - players.length) * replacement;
-  return pickXI(players, l.squadRules, l.domesticCountries).reduce((a, p) => a + overall(p), 0);
+  return pickXI(players, l.squadRules, domesticOf(club)).reduce((a, p) => a + overall(p), 0);
 }
 
 /**
@@ -100,7 +107,8 @@ const BUDGET_SHARE: Record<string, number> = {
 // ------------------------------------------------------------------ setup / lots
 
 export function setupAuctions(w: WorldState) {
-  const order = [...LEAGUES].sort((a, b) => w.leagues[b.id].reputation - w.leagues[a.id].reputation || a.id.localeCompare(b.id));
+  // Leagues auction in descending reputation; pyramid divisions in tier order.
+  const order = [...activeLeagues(w)].sort((a, b) => (a.tier ?? 0) - (b.tier ?? 0) || w.leagues[b.id].reputation - w.leagues[a.id].reputation || a.id.localeCompare(b.id));
   const userLeague = w.clubs[w.userClubId].leagueId;
   w.auctions = {};
   w.auctionOrder = [];
@@ -114,16 +122,60 @@ export function setupAuctions(w: WorldState) {
   });
 }
 
+/**
+ * Registration. Every uncontracted senior player is eligible; a player is registered for this
+ * auction when at least one of its clubs could sign him (export rules). The main catalogue
+ * offers the strongest registered players by market value — enough for every open squad place
+ * with depth to spare (the rule is shown in the auction room) — and the rest of the registered
+ * pool stays callable in the accelerated round, so nobody eligible is invisible.
+ */
+export function registrationFor(w: WorldState, l: LeagueConfig): { eligible: Player[]; registered: Player[] } {
+  const clubs = clubsInLeague(w, l.id);
+  const eligible = Object.values(w.players).filter((p) => eligibleForLeague(p, l) && ageOf(p, w.season) >= 16);
+  const registered = eligible.filter((p) => clubs.some((c) => exportAllowed(p.country, c)));
+  return { eligible, registered };
+}
+
 function buildLots(w: WorldState, a: AuctionState): AuctionLot[] {
   const l = leagueById(a.leagueId);
   const clubs = clubsInLeague(w, l.id);
-  const pool = Object.values(w.players).filter((p) => eligibleForLeague(p, l) && ageOf(p, w.season) >= 16);
-  const vacancies = clubs.reduce((s, c) => s + Math.max(0, l.squadRules.maxSquad - c.squad.length), 0);
-  const osVac = clubs.reduce((s, c) => s + Math.max(0, l.squadRules.maxOverseas - squadOf(w, c).filter((p) => isOverseas(p, l.domesticCountries)).length), 0);
+  const { eligible, registered } = registrationFor(w, l);
   const byValue = (x: Player, y: Player) => marketValue(y, w.season) - marketValue(x, w.season) || x.id.localeCompare(y.id);
-  const domestic = pool.filter((p) => !isOverseas(p, l.domesticCountries)).sort(byValue).slice(0, Math.ceil((vacancies - osVac) * 1.3) + 8);
-  const overseas = pool.filter((p) => isOverseas(p, l.domesticCountries)).sort(byValue).slice(0, Math.ceil(osVac * 1.7) + 6);
-  const chosen = [...domestic, ...overseas];
+  // Domestic depth per home-country group (clubs sharing domestic rules), so every club can
+  // complete a legal squad; then the overseas market (players overseas to every club here).
+  const groups = new Map<string, { countries: Player['country'][]; need: number }>();
+  let osVac = 0;
+  for (const c of clubs) {
+    const dom = domesticOf(c);
+    const key = [...dom].sort().join('|');
+    const vac = Math.max(0, l.squadRules.maxSquad - c.squad.length);
+    const os = Math.max(0, l.squadRules.maxOverseas - squadOf(w, c).filter((p) => isOverseas(p, dom)).length);
+    osVac += os;
+    const g = groups.get(key) ?? { countries: dom, need: 0 };
+    g.need += Math.max(0, vac - Math.min(os, Math.floor(vac * 0.3)));
+    groups.set(key, g);
+  }
+  const picked = new Set<string>();
+  const chosen: Player[] = [];
+  for (const g of groups.values()) {
+    for (const p of registered.filter((x) => g.countries.includes(x.country)).sort(byValue).slice(0, Math.ceil(g.need * 1.6) + 6)) {
+      if (!picked.has(p.id)) {
+        picked.add(p.id);
+        chosen.push(p);
+      }
+    }
+  }
+  const domesticSomewhere = (p: Player) => clubs.some((c) => !isOverseas(p, domesticOf(c)));
+  for (const p of registered.filter((x) => !domesticSomewhere(x)).sort(byValue).slice(0, Math.ceil(osVac * 2) + 8)) {
+    if (!picked.has(p.id)) {
+      picked.add(p.id);
+      chosen.push(p);
+    }
+  }
+  a.registration = {
+    eligible: eligible.length, registered: registered.length, catalogued: chosen.length,
+    rule: `Catalogue: ${chosen.length} players — the highest-valued domestic players for each home country here (about 1.6 per open domestic place) plus the best overseas players (about 2 per open overseas slot). The other ${registered.length - chosen.length} registered players can be called up in the accelerated round.`,
+  };
   const scale = priceScale(l);
   const roundBase = (v: number) => {
     const step = increment(l, v);
@@ -186,19 +238,21 @@ export interface Valuation {
 export function valuePlayer(w: WorldState, a: AuctionState, club: Club, p: Player, lotIndex: number): Valuation {
   const l = leagueById(a.leagueId);
   const squad = squadOf(w, club);
-  const reg = canRegister(squad, p, l.squadRules, l.domesticCountries);
+  const reg = registerCheck(w, club, p, l);
   if (!reg.ok) return { value: 0, maxBid: 0, reason: reg.reason ?? 'ineligible' };
   const scale = priceScale(l);
   const cat = categoryOf(p);
   const tgt = roleTargets(l);
   const have = squad.filter((x) => categoryOf(x) === cat).length;
+  // Role cap: a club with this role well covered withdraws rather than stockpiling.
+  if (have >= tgt[cat] + 3) return { value: 0, maxBid: 0, reason: `role cap: already ${have} in that role (plan ${tgt[cat]})` };
   const need = have < tgt[cat] ? 1 + (0.45 * (tgt[cat] - have)) / tgt[cat] + (have === 0 && cat === 'WK' ? 0.4 : 0) : Math.pow(0.6, have - tgt[cat] + 1);
   // Contribution: rating points this player adds to the club's likely XI over what it could
   // still buy cheaply (replacement level), priced from the league's economics, with a modest
   // premium for genuinely rare quality. Blended with the market's view of the player.
   const repl = replacementLevel(w, a, lotIndex);
-  const before = xiStrength(squad, l, repl);
-  const after = xiStrength([...squad, p], l, repl);
+  const before = xiStrength(squad, l, club, repl);
+  const after = xiStrength([...squad, p], l, club, repl);
   const deltaXI = Math.max(0, after - before);
   const market = marketValue(p, w.season);
   const contribution = pricePerPoint(l) * deltaXI * (1 + deltaXI / 30);
@@ -210,9 +264,9 @@ export function valuePlayer(w: WorldState, a: AuctionState, club: Club, p: Playe
   const scarcity = later === 0 ? 1.15 : later >= 4 ? 0.88 : 1;
   value *= scarcity;
   // Overseas slots are precious: an overseas player must clearly beat the domestic option.
-  const os = isOverseas(p, l.domesticCountries);
+  const os = isOverseas(p, domesticOf(club));
   if (os) {
-    const osHave = squad.filter((x) => isOverseas(x, l.domesticCountries)).length;
+    const osHave = squad.filter((x) => isOverseas(x, domesticOf(club))).length;
     value *= 0.85 + Math.max(0, ovr - 72) / 60 - osHave * 0.03;
   }
   // A club that just lost a contested player in this role chases a substitute a little harder.
@@ -262,7 +316,7 @@ export function leader(lot: AuctionLot): string | null {
 export function validBidFor(w: WorldState, a: AuctionState, club: Club, p: Player, amount: number): string | null {
   const l = leagueById(a.leagueId);
   const squad = squadOf(w, club);
-  const reg = canRegister(squad, p, l.squadRules, l.domesticCountries);
+  const reg = registerCheck(w, club, p, l);
   if (!reg.ok) return reg.reason!;
   const aff = canAfford(club.purse, amount, squad.length, l.squadRules, l.auctionRules.minBase);
   if (!aff.ok) return aff.reason!;
@@ -410,7 +464,9 @@ export function endRound(w: WorldState, a: AuctionState, selectAccelerated = fal
   const hasRound2 = a.lots.some((x) => x.round === 2);
   if (l.auctionRules.unsoldRound && round1Done && !hasRound2 && a.live && selectAccelerated) {
     // Interactive auction: the user (and AI clubs' nominations) choose who returns.
-    const candidates = a.lots.filter((x) => x.status === 'unsold').map((x) => x.playerId).filter((pid) => !w.players[pid].clubId);
+    const offered = new Set(a.lots.map((x) => x.playerId));
+    const uncatalogued = registrationFor(w, l).registered.filter((p) => !offered.has(p.id)).sort((x, y) => marketValue(y, w.season) - marketValue(x, w.season)).slice(0, 120).map((p) => p.id);
+    const candidates = [...a.lots.filter((x) => x.status === 'unsold').map((x) => x.playerId).filter((pid) => !w.players[pid].clubId), ...uncatalogued];
     if (candidates.length) {
       const nominated = candidates.filter((pid) =>
         clubsInLeague(w, l.id).some((c) => !c.isUser && valuePlayer(w, a, c, w.players[pid], a.lots.length).maxBid >= l.auctionRules.minBase * 1.2),
@@ -424,6 +480,14 @@ export function endRound(w: WorldState, a: AuctionState, selectAccelerated = fal
   if (l.auctionRules.unsoldRound && round1Done && !hasRound2 && !selectAccelerated) {
     const unsold = a.lots.filter((x) => x.status === 'unsold').slice(0, 80);
     const fresh: AuctionLot[] = unsold.map((x) => ({ ...x, id: `${x.id}-r2`, status: 'pending', bids: [], soldTo: null, price: null, round: 2, userOut: false }));
+    // AI clubs with open places nominate from the uncatalogued registered pool (one per club with a need).
+    const offered = new Set(a.lots.map((x) => x.playerId));
+    const extra = registrationFor(w, l).registered.filter((p) => !offered.has(p.id)).sort((x, y) => marketValue(y, w.season) - marketValue(x, w.season)).slice(0, 60);
+    for (const c of clubsInLeague(w, l.id)) {
+      if (c.isUser || c.squad.length >= Math.min(l.squadRules.maxSquad, 20)) continue;
+      const pick = extra.find((p) => !fresh.some((f) => f.playerId === p.id) && registerCheck(w, c, p, l).ok);
+      if (pick) fresh.push({ id: `${a.id}-${pick.id}-r2`, playerId: pick.id, set: 'Accelerated', basePrice: l.auctionRules.minBase, status: 'pending', bids: [], soldTo: null, price: null, round: 2, userOut: false });
+    }
     if (fresh.length) {
       a.lots.push(...fresh);
       a.log.push(`Accelerated round: ${fresh.length} unsold players return.`);
@@ -479,7 +543,7 @@ export function fillSquadToMinimum(w: WorldState, c: Club, l: LeagueConfig): num
     const squad = squadOf(w, c);
     const tgt = roleTargets(l);
     const pool = Object.values(w.players)
-      .filter((p) => eligibleForLeague(p, l) && ageOf(p, w.season) >= 16 && canRegister(squad, p, l.squadRules, l.domesticCountries).ok)
+      .filter((p) => eligibleForLeague(p, l) && ageOf(p, w.season) >= 16 && registerCheck(w, c, p, l).ok)
       .map((p) => {
         const cat = categoryOf(p);
         const have = squad.filter((x) => categoryOf(x) === cat).length;

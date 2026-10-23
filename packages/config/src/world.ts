@@ -1,7 +1,7 @@
 /** Server-side world configuration: reputation, qualification, development, condition and finance. */
 export const WORLD = {
   startSeason: 2027,
-  schemaVersion: 4,
+  schemaVersion: 5,
 
   reputation: {
     /** Learning rate applied to the (actual − expected) performance residual. */
@@ -82,8 +82,8 @@ export const WORLD = {
 export const FEATURE_FLAGS = {
   impactPlayer: false,
   sealedBids: false,
-  odiEngine: false,
-  testEngine: false,
-  nationalTeamMode: false,
+  odiEngine: true,
+  testEngine: true,
+  nationalTeamMode: true,
   loans: false,
 };

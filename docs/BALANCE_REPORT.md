@@ -45,11 +45,21 @@ A second test checks that the **Player of the Match** always goes to the top con
 
 All constants are in `packages/config/src/simulation.ts`.
 
+## ODI and Test cricket
+
+The same engine plays every format. Longer formats scale batting intent, how tightly shot choice follows intent, and the log-odds of being beaten or edging. Tests use attacking fields: slips and gully for pace, bat-pad catchers for spin. Measured with `npm run format-lab` between strong curated national sides on mixed venues:
+
+| Format | First-innings average | Wickets | Run rate | Notes |
+| --- | --- | --- | --- | --- |
+| ODI (40 matches) | about 280 | about 9 | about 6.0 an over | Second-innings chases end lower, as chases often do |
+| Test (24 matches) | about 305 (first), 280 (second), 195 (third), 150 (fourth) | about 10, 9.5, 9, 8 | about 3.1 an over | About 76% dot balls. Declarations and follow-ons occur; innings victories are common; draws are rare because weather is not modelled |
+
 ## Reproducing
 
 ```bash
 npm test -- calibration      # the guard rails above
 npm run lab -- 2000          # a wider report from N seeded matches
+npm run format-lab -- Test 20  # ODI or Test distributions
 ```
 
 ## Known limitations

@@ -24,7 +24,7 @@ const snapshot = (w: WorldState) => {
 
 describe('club world', () => {
   it('reacts to a real season with idempotent, source-linked, consistent content', () => {
-    const w = createWorld({ careerId: 'cw', seed: 'club-world', managerName: 'Tester', difficulty: 'professional', clubId: 'MUM' });
+    const w = createWorld({ careerId: 'cw', seed: 'club-world', managerName: 'Tester', difficulty: 'professional', clubId: 'MUM', worldModel: 'leagues' });
     clubWorldSync(w); // auction phase: journalists publish auction rumours
     const auctionRumours = cw(w).rumours.filter((r) => r.context === 'auction');
     expect(auctionRumours.length).toBeGreaterThan(0);

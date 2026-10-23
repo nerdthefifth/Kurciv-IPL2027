@@ -1,5 +1,5 @@
 import type { Club, LeagueConfig, NewsItem, Player, WorldState } from '@kurciv/domain';
-import { leagueById } from '@kurciv/config';
+import { DIVISIONS, LEAGUES, leagueById } from '@kurciv/config';
 import { Rng } from '@kurciv/simulation';
 
 export function nextId(w: WorldState, prefix: string): string {
@@ -15,6 +15,13 @@ export function worldRng(w: WorldState, label: string): Rng {
 export function leagueOf(w: WorldState, club: Club): LeagueConfig {
   return leagueById(club.leagueId);
 }
+
+/** The competitions clubs belong to: pyramid divisions (new careers) or national leagues (older saves). */
+export function activeLeagues(w: WorldState): LeagueConfig[] {
+  return w.worldModel === 'pyramid' ? DIVISIONS : LEAGUES;
+}
+
+export const isPyramid = (w: WorldState) => w.worldModel === 'pyramid';
 
 export function squadOf(w: WorldState, club: Club): Player[] {
   return club.squad.map((id) => w.players[id]).filter(Boolean);

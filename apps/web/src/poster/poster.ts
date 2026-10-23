@@ -171,7 +171,7 @@ export async function ensureFonts() {
 // ------------------------------------------------------------------ drawing primitives
 
 const C = {
-  bg: '#101210', graphite: '#191D19', charcoal: '#232722', ivory: '#F1F0E8', sage: '#A6B09F', faint: '#6F776A', lime: '#C5F36B', line: 'rgba(241,240,232,0.10)',
+  bg: '#170F12', graphite: '#21161A', charcoal: '#2E2025', ivory: '#F3E9E2', sage: '#BBA79F', faint: '#8A766F', lime: '#E08AA0', line: 'rgba(243,233,226,0.10)',
 };
 const F = { serif: '"Fraunces", Georgia, serif', cond: '"Barlow Condensed", "Arial Narrow", sans-serif', sans: '"Inter", "Segoe UI", system-ui, sans-serif' };
 type Ctx = CanvasRenderingContext2D;

@@ -38,7 +38,7 @@ function runAuctions(w: WorldState) {
 
 describe('career', () => {
   it('runs two full seasons with auctions, WCC, reputation and retentions', () => {
-    const w = createWorld({ careerId: 'c1', seed: 'career-test', managerName: 'Test', difficulty: 'professional', clubId: 'MUM' });
+    const w = createWorld({ careerId: 'c1', seed: 'career-test', managerName: 'Test', difficulty: 'professional', clubId: 'MUM', worldModel: 'leagues' });
     expect(w.phase).toBe('auction');
     runAuctions(w);
     checkInvariants(w);
@@ -115,9 +115,9 @@ describe('career', () => {
   }, 300_000);
 
   it('rejects invalid custom clubs and duplicate identities', () => {
-    expect(() => createWorld({ careerId: 'c2', seed: 's', managerName: 'x', difficulty: 'rookie', customClub: { name: 'Mumbai Indians', shortName: 'MMX', city: 'Mumbai', leagueId: 'IPL', colors: ['#000', '#fff'] } })).toThrow(/already exists/);
-    expect(() => createWorld({ careerId: 'c2', seed: 's', managerName: 'x', difficulty: 'rookie', customClub: { name: 'Pune Pythons', shortName: 'MUM', city: 'Pune', leagueId: 'IPL', colors: ['#000', '#fff'] } })).toThrow(/already used/);
-    const w = createWorld({ careerId: 'c3', seed: 's', managerName: 'x', difficulty: 'rookie', customClub: { name: 'Pune Pythons', shortName: 'PUP', city: 'Pune', leagueId: 'IPL', colors: ['#000', '#fff'] } });
+    expect(() => createWorld({ careerId: 'c2', seed: 's', managerName: 'x', difficulty: 'rookie', customClub: { name: 'Mumbai Indians', shortName: 'MMX', city: 'Mumbai', leagueId: 'IPL', colors: ['#000', '#fff'] }, worldModel: 'leagues' })).toThrow(/already exists/);
+    expect(() => createWorld({ careerId: 'c2', seed: 's', managerName: 'x', difficulty: 'rookie', customClub: { name: 'Pune Pythons', shortName: 'MUM', city: 'Pune', leagueId: 'IPL', colors: ['#000', '#fff'] }, worldModel: 'leagues' })).toThrow(/already used/);
+    const w = createWorld({ careerId: 'c3', seed: 's', managerName: 'x', difficulty: 'rookie', customClub: { name: 'Pune Pythons', shortName: 'PUP', city: 'Pune', leagueId: 'IPL', colors: ['#000', '#fff'] }, worldModel: 'leagues' });
     expect(w.clubs.PUP.isUser).toBe(true);
     expect(Object.values(w.clubs).filter((c) => c.isUser)).toHaveLength(1);
   });

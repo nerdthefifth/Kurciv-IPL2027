@@ -34,6 +34,16 @@ export function approachLabel(intent: number): string {
   return best.label;
 }
 
+/** Default batting intent relative to T20 when the user has not set one for the format. */
+const FORMAT_INTENT = { T20: 1, ODI: 0.72, Test: 0.32 } as const;
+/**
+ * Longer formats: batters play within themselves and survive more good balls (log-odds shift on
+ * being beaten and on edging), tuned with tools/format-lab.ts.
+ */
+const FORMAT_RISK = { T20: 0, ODI: -0.45, Test: -1.5 } as const;
+/** How tightly shot choice follows intent: Test batters rarely play a shot their intent does not call for. */
+const FORMAT_SHARPNESS = { T20: 1, ODI: 1.2, Test: 2.4 } as const;
+
 const RUNNING_SAFETY: Record<RunningStyle, number> = { conservative: 0.16, balanced: 0, aggressive: -0.12 };
 
 export const ENGINE_VERSION = SIM.engineVersion;
@@ -59,12 +69,43 @@ export function currentInnings(s: MatchState): InningsState | null {
   return s.innings.length ? s.innings[s.innings.length - 1] : null;
 }
 
-export function phaseOf(inn: InningsState, rulesPP: number, overs: number): 'powerplay' | 'middle' | 'death' {
+export function phaseOf(inn: InningsState, rulesPP: number, overs: number, deathOvers = 5): 'powerplay' | 'middle' | 'death' {
   if (inn.superOver) return 'death';
   const over = Math.floor(inn.legalBalls / 6);
   if (over < rulesPP) return 'powerplay';
-  if (over >= overs - 5) return 'death';
+  if (deathOvers > 0 && over >= overs - deathOvers) return 'death';
   return 'middle';
+}
+
+/** The phase of play for the current ball, honouring the match format. */
+export function phaseFor(s: MatchState, inn: InningsState): 'powerplay' | 'middle' | 'death' {
+  const r = s.setup.rules;
+  return phaseOf(inn, r.powerplayOvers, r.overs, r.deathOvers ?? 5);
+}
+
+export const formatOf = (s: MatchState): 'T20' | 'ODI' | 'Test' => s.setup.rules.format ?? 'T20';
+export const isTest = (s: MatchState) => formatOf(s) === 'Test';
+
+/** Legal balls bowled so far in the whole match (the Test time budget). */
+export function matchBallsUsed(s: MatchState): number {
+  return s.innings.filter((i) => !i.superOver).reduce((a, i) => a + i.legalBalls, 0);
+}
+
+/** Test cricket clock: day and session (three sessions of 30 overs a day) from the balls bowled. */
+export function testClock(s: MatchState): { day: number; session: number; oversToday: number; label: string } {
+  const perDay = (s.setup.rules.oversPerDay ?? 90) * 6;
+  const used = matchBallsUsed(s);
+  const day = Math.min(s.setup.rules.days ?? 5, Math.floor(used / perDay) + 1);
+  const inDay = used - (day - 1) * perDay;
+  const session = Math.min(3, Math.floor(inDay / (perDay / 3)) + 1);
+  return { day, session, oversToday: Math.floor(inDay / 6), label: `Day ${day}, ${['morning', 'afternoon', 'evening'][session - 1]} session` };
+}
+
+/** Runs each side has scored across its innings (Test cricket). */
+export function sideTotals(s: MatchState): Record<Side, number> {
+  const t: Record<Side, number> = { home: 0, away: 0 };
+  for (const i of s.innings) if (!i.superOver) t[i.battingSide] += i.runs;
+  return t;
 }
 
 export function sideOfPlayer(s: MatchState, id: string): Side {
@@ -101,9 +142,15 @@ function emptyBowler(id: string): BowlerInnings {
  */
 const STANDARD_FIELD = { powerplay: 'pp-control', middle: 'mid-pace', death: 'death-yorker' } as const;
 
+/** Test cricket keeps catchers in: slips and gully for pace, bat-pad fielders for spin. */
+function standardFieldId(s: MatchState, inn: InningsState, spin: boolean): string {
+  if (isTest(s) && !inn.superOver) return spin ? 'test-spin' : 'test-pace';
+  return STANDARD_FIELD[phaseFor(s, inn)];
+}
+
 function setStandardField(s: MatchState, inn: InningsState) {
-  const t = BUILT_IN_FIELDS.find((f) => f.id === STANDARD_FIELD[phaseOf(inn, s.setup.rules.powerplayOvers, s.setup.rules.overs)])!;
   const bowler = inn.currentBowlerId ? team(s, inn.bowlingSide).xi.find((p) => p.id === inn.currentBowlerId) : null;
+  const t = BUILT_IN_FIELDS.find((f) => f.id === standardFieldId(s, inn, !!bowler && isSpin(bowler.bowlType)))!;
   inn.field = { templateId: t.id, name: 'Standard field', positions: t.positions.map((p) => ({ ...p })), keeperUp: !!bowler && isSpin(bowler.bowlType) };
 }
 
@@ -121,7 +168,7 @@ function startInnings(s: MatchState, battingSide: Side, target: number | null, s
     battingSide,
     bowlingSide: bowlSide,
     superOver,
-    maxBalls: superOver ? 6 : s.setup.rules.overs * 6,
+    maxBalls: superOver ? 6 : s.setup.rules.format === 'Test' ? Math.max(6, s.setup.rules.overs * 6 - matchBallsUsed(s)) : s.setup.rules.overs * 6,
     maxWickets: superOver ? 2 : Math.min(10, bat.xi.length - 1),
     target,
     runs: 0,
@@ -327,6 +374,18 @@ function applyActionInner(s: MatchState, side: Side, action: MatchAction, inn: I
       inn.nonStrikerId = ids[1];
       return { ok: true };
     }
+    case 'declare': {
+      if (!isTest(s)) return { ok: false, error: 'Declarations are only allowed in Test cricket.' };
+      if (!inn || inn.battingSide !== side || inn.complete) return { ok: false, error: 'Your side is not batting.' };
+      if (inn.index === 3) return { ok: false, error: 'The side batting last cannot declare.' };
+      inn.declareRequested = true;
+      return { ok: true };
+    }
+    case 'follow-on': {
+      if (!isTest(s)) return { ok: false, error: 'The follow-on only exists in Test cricket.' };
+      s.followOnChoice = { ...(s.followOnChoice ?? {}), [side]: action.enforce };
+      return { ok: true };
+    }
     case 'review': {
       if (s.pending?.kind !== 'review' || s.pending.side !== side || !s.pendingEvent || !s.pendingMeta || !inn) {
         return { ok: false, error: 'No decision to review.' };
@@ -351,6 +410,7 @@ export function step(s: MatchState, ctl: Controllers, captain: Captain): StepRes
   if (s.pending) return { needs: s.pending };
 
   s.lastCtl = ctl;
+  lastCaptain = captain;
   if (s.status === 'toss') {
     if (s.toss.coin === null) {
       const u = s.setup.userSide;
@@ -573,10 +633,11 @@ export function fieldForDelivery(s: MatchState, ev: DeliveryEvent): { id: string
   const inn = s.innings[ev.innings];
   if (!inn) return [];
   const rules = s.setup.rules;
-  const phase = inn.superOver ? 'death' : ev.over < rules.powerplayOvers ? 'powerplay' : ev.over >= rules.overs - 5 ? 'death' : 'middle';
-  const t = BUILT_IN_FIELDS.find((f) => f.id === STANDARD_FIELD[phase])!;
+  const dOv = rules.deathOvers ?? 5;
+  const phase = inn.superOver ? 'death' : ev.over < rules.powerplayOvers ? 'powerplay' : dOv > 0 && ev.over >= rules.overs - dOv ? 'death' : 'middle';
   const striker = playerById(s, ev.strikerId);
   const bowler = playerById(s, ev.bowlerId);
+  const t = BUILT_IN_FIELDS.find((f) => f.id === (isTest(s) && !inn.superOver ? (isSpin(bowler.bowlType) ? 'test-spin' : 'test-pace') : STANDARD_FIELD[phase]))!;
   const raw = inn.mirror && striker.batHand === 'L' ? t.positions.map(mirror) : t.positions;
   const positions = fitToVenue(raw, s.setup.venue);
   const view = { ...inn, field: { ...inn.field, keeperUp: isSpin(bowler.bowlType) } };
@@ -857,7 +918,7 @@ function deliver(
   const striker = playerById(s, inn.strikerId);
   const nonStriker = playerById(s, inn.nonStrikerId);
   const bowlStats = inn.bowlers[bowler.id];
-  const phase = phaseOf(inn, rules.powerplayOvers, rules.overs);
+  const phase = phaseFor(s, inn);
   const spin = isSpin(bowler.bowlType);
   const hand = striker.batHand;
   const secondInnings = inn.index % 2 === 1;
@@ -879,7 +940,7 @@ function deliver(
   let intent: number;
   const userBats = ctl[inn.battingSide] === 'manual';
   if (userBats && !autoFor(s, inn.battingSide).approach) {
-    intent = inn.batterIntent[striker.id] ?? inn.intent ?? batTeam.tactics.phaseIntent[phase];
+    intent = inn.batterIntent[striker.id] ?? inn.intent ?? batTeam.tactics.phaseIntent[phase] * FORMAT_INTENT[formatOf(s)];
   } else {
     intent = captain.battingIntent(s, inn.battingSide, striker.id);
   }
@@ -998,7 +1059,7 @@ function deliver(
   const weights = candidates.map((sh) => {
     const ls = sh.lengths[length] ?? -0.8;
     const li = sh.lines[line] ?? -0.5;
-    let w = Math.exp(SIM.lengthSuitWeight * ls + SIM.lineSuitWeight * li - SIM.intentSharpness * (intent - sh.intent) ** 2);
+    let w = Math.exp(SIM.lengthSuitWeight * ls + SIM.lineSuitWeight * li - SIM.intentSharpness * FORMAT_SHARPNESS[formatOf(s)] * (intent - sh.intent) ** 2);
     // Batters read the ball: a well-executed delivery is respected (defended or worked away)
     // rather than attacked. The more attacking the shot, the more the read matters.
     if (e > 0) w *= Math.exp(-SIM.respectWeight * e * sh.intent * (1.15 - intent));
@@ -1032,14 +1093,15 @@ function deliver(
 
   // ----- leave
   if (shot.id === 'leave') {
-    if (line === 'stumps' && ['yorker', 'full', 'good'].includes(length) && rng.chance(0.55)) {
+    if (line === 'stumps' && ['yorker', 'full', 'good'].includes(length) && rng.chance(formatOf(s) === 'T20' ? 0.55 : 0.3)) {
       return { ev: finish({ contact: 'leave', wicket: { kind: 'bowled', playerOutId: striker.id, bowlerId: bowler.id, fielderId: null, text: '' } }), lbw: null };
     }
     return { ev: finish({ contact: 'leave' }), lbw: null };
   }
 
   // ----- beaten?
-  const pMiss = sigmoid(SIM.missBias + SIM.missRisk * shot.risk - SIM.missSkill * delta - SIM.missSuit * suit + SIM.missDelivery * e + SIM.missMovement * movementThreat - (shot.id === 'defend' ? 0.5 : 0));
+  const fmtRisk = FORMAT_RISK[formatOf(s)];
+  const pMiss = sigmoid(SIM.missBias + fmtRisk + SIM.missRisk * shot.risk - SIM.missSkill * delta - SIM.missSuit * suit + SIM.missDelivery * e + SIM.missMovement * movementThreat - (shot.id === 'defend' ? 0.5 : 0));
   if (rng.chance(pMiss)) {
     const lengthHit: Record<Length, number> = { yorker: 1.35, full: 1.1, good: 1, back: 0.45, short: 0.05 };
     const lineHit = line === 'stumps' ? SIM.hitStumpsOnStumpsLine : line === 'off' ? SIM.hitStumpsOnOffLine : 0;
@@ -1095,7 +1157,7 @@ function deliver(
 
   // ----- edge?
   const edgeLine = line === 'off' || line === 'wide' || (line === 'stumps' && rng.chance(0.5));
-  const pEdge = sigmoid(SIM.edgeBias + SIM.edgeRisk * shot.risk - SIM.edgeSkill * delta + SIM.edgeMovement * movementThreat + 0.4 * e - 0.3 * suit) * (spin ? 0.6 : 1) * (edgeLine ? 1 : 0.35);
+  const pEdge = sigmoid(SIM.edgeBias + fmtRisk + SIM.edgeRisk * shot.risk - SIM.edgeSkill * delta + SIM.edgeMovement * movementThreat + 0.4 * e - 0.3 * suit) * (spin ? 0.6 : 1) * (edgeLine ? 1 : 0.35);
   if (shot.id !== 'defend' || rng.chance(0.6)) {
     if (rng.chance(pEdge)) {
       const outside = edgeLine && rng.chance(0.82);
@@ -1271,7 +1333,12 @@ function finalize(s: MatchState, inn: InningsState, ev: DeliveryEvent, ctl: Cont
   inn.freeHit = isNoBall ? true : ev.legal ? false : inn.freeHit;
 
   const overDone = ev.legal && inn.legalBalls % 6 === 0;
-  const inningsDone = inn.wickets >= inn.maxWickets || inn.legalBalls >= inn.maxBalls || (inn.target !== null && inn.runs >= inn.target);
+  // Test cricket: the batting side may close its innings at the end of an over.
+  if (overDone && isTest(s) && inn.index < 3 && !inn.superOver && inn.wickets < inn.maxWickets) {
+    const wants = inn.declareRequested || (ctl[inn.battingSide] === 'ai' && captain?.declare?.(s, inn.battingSide));
+    if (wants) inn.declared = true;
+  }
+  const inningsDone = inn.declared || inn.wickets >= inn.maxWickets || inn.legalBalls >= inn.maxBalls || (inn.target !== null && inn.runs >= inn.target);
 
   ev.scoreAfter = { runs: inn.runs, wickets: inn.wickets };
   s.deliveries.push(ev);
@@ -1390,9 +1457,56 @@ function overAnalysis(s: MatchState, inn: InningsState, o: OverSummary): string[
   return out;
 }
 
+/** Test cricket: who bats next, the follow-on, the fourth-innings target, results and draws. */
+function afterTestInnings(s: MatchState) {
+  const inn = currentInnings(s)!;
+  const totals = sideTotals(s);
+  const outOfTime = matchBallsUsed(s) >= s.setup.rules.overs * 6;
+  const timesBatted = (side: Side) => s.innings.filter((i) => i.battingSide === side).length;
+  if (inn.index === 3) {
+    if (inn.target !== null && inn.runs >= inn.target) return finishMatch(s, inn.battingSide, inn);
+    if (inn.wickets >= inn.maxWickets) return finishMatch(s, inn.bowlingSide, inn);
+    return finishDraw(s);
+  }
+  if (outOfTime) return finishDraw(s);
+  if (inn.index === 0) return startInnings(s, inn.bowlingSide, null, false);
+  if (inn.index === 1) {
+    const first = s.innings[0].battingSide;
+    const lead = totals[first] - totals[other(first)];
+    const fo = s.setup.rules.followOn ?? 200;
+    if (lead >= fo) {
+      const enforce = s.followOnChoice?.[first] ?? lastCaptain?.followOn?.(s, first, lead) ?? true;
+      if (enforce) {
+        startInnings(s, other(first), null, false);
+        currentInnings(s)!.followOn = true;
+        return;
+      }
+    }
+    return startInnings(s, first, null, false);
+  }
+  // After three innings the side that has batted once chases.
+  const chaser: Side = timesBatted('home') === 1 ? 'home' : 'away';
+  const target = totals[other(chaser)] - totals[chaser] + 1;
+  if (target <= 0) {
+    // The side that followed on is still behind: an innings victory.
+    const by = 1 - target;
+    return finishMatch(s, chaser === inn.battingSide ? other(inn.battingSide) : chaser, inn, `by an innings and ${by} run${by === 1 ? '' : 's'}`);
+  }
+  startInnings(s, chaser, target, false);
+}
+
+function finishDraw(s: MatchState) {
+  s.status = 'complete';
+  s.result = { winner: null, margin: 'Match drawn', superOver: false, playerOfMatch: null, drawn: true };
+}
+
+/** The captain in use for the current step (Test follow-on decisions are taken between innings). */
+let lastCaptain: Captain | null = null;
+
 function afterInnings(s: MatchState) {
   const inn = currentInnings(s)!;
   const { rules } = s.setup;
+  if (isTest(s) && !inn.superOver) return afterTestInnings(s);
   if (!inn.superOver && inn.index === 0) {
     startInnings(s, inn.bowlingSide, inn.runs + 1, false);
     return;
@@ -1430,11 +1544,16 @@ function finishMatch(s: MatchState, winner: Side | null, last: InningsState, not
   let margin: string;
   if (!winner) margin = 'Match tied';
   else if (note) margin = `won ${note}`;
+  else if (isTest(s) && winner !== last.battingSide) {
+    const totals = sideTotals(s);
+    const r = totals[winner] - totals[other(winner)];
+    margin = `won by ${r} run${r === 1 ? '' : 's'}`;
+  }
   else if (superOver) margin = 'won the Super Over';
   else if (winner === last.battingSide) {
     const wl = last.maxWickets - last.wickets;
     const bl = last.maxBalls - last.legalBalls;
-    margin = `won by ${wl} wicket${wl === 1 ? '' : 's'} (${bl} ball${bl === 1 ? '' : 's'} left)`;
+    margin = isTest(s) ? `won by ${wl} wicket${wl === 1 ? '' : 's'}` : `won by ${wl} wicket${wl === 1 ? '' : 's'} (${bl} ball${bl === 1 ? '' : 's'} left)`;
   } else {
     const first = s.innings[last.index - 1];
     const r = first.runs - last.runs;

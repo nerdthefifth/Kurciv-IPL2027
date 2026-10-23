@@ -131,6 +131,8 @@ export const BUILT_IN_FIELDS: FieldTemplate[] = [
   t('boundary', 'Boundary Protection', ['Point', 'Cover', 'Mid-off', 'Midwicket', 'Third man', 'Fine leg', 'Deep cover', 'Deep midwicket', 'Long on'], false, 'death'),
   t('new-batter', 'New Batter Attack', ['Slip 1', 'Slip 2', 'Gully', 'Short leg', 'Cover', 'Mid-off', 'Mid-on', 'Third man', 'Fine leg'], false, 'wicket'),
   t('chase-defend', 'Defensive Chase Management', ['Point', 'Short third man', 'Short fine leg', 'Mid-off', 'Long off', 'Long on', 'Deep midwicket', 'Deep cover', 'Deep square leg'], false, 'defend'),
+  t('test-pace', 'Test Match Attack', ['Slip 1', 'Slip 2', 'Slip 3', 'Gully', 'Point', 'Cover', 'Mid-off', 'Mid-on', 'Square leg'], false, 'test'),
+  t('test-spin', 'Test Match Spin', ['Slip 1', 'Short leg', 'Silly point', 'Point', 'Cover', 'Mid-off', 'Mid-on', 'Midwicket', 'Square leg'], true, 'test'),
   t('short-ball', 'Short-Ball Plan', ['Slip 1', 'Cover', 'Mid-off', 'Mid-on', 'Fine leg', 'Deep square leg', 'Deep midwicket', 'Third man', 'Deep point'], false, 'short'),
 ];
 
